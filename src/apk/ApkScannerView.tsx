@@ -21,6 +21,7 @@ import { ApkScanResult, AppCategory, PermissionDetail } from '../types';
 import { CATEGORIES_INFO } from './permissionRef';
 import { SAMPLE_APKS } from './sampleApks';
 import { parseApkFile, evaluatePermissions } from './apkAnalyzer';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface ApkScannerViewProps {
   onBackToHome: () => void;
@@ -33,13 +34,18 @@ export const ApkScannerView: React.FC<ApkScannerViewProps> = ({
   initialScanResult = null,
   onOpenCertificate,
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState<AppCategory>('flashlight');
+  // Fix #1: sync selectedCategory với initialScanResult.appCategory thay vì luôn mặc định 'flashlight'
+  const [selectedCategory, setSelectedCategory] = useState<AppCategory>(
+    initialScanResult?.appCategory ?? 'flashlight'
+  );
   const [scanResult, setScanResult] = useState<ApkScanResult | null>(initialScanResult);
   const [isScanning, setIsScanning] = useState(false);
   const [scanStep, setScanStep] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copiedReport, setCopiedReport] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  // Fix #9: progress tracking thực tế thay vì animate-pulse cố định
+  const [scanProgress, setScanProgress] = useState(0);
 
   // Table search & filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,25 +53,30 @@ export const ApkScannerView: React.FC<ApkScannerViewProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Trigger file scan
+  // Trigger file scan — với progress tracking động
   const handleFileProcess = async (file: File) => {
     setErrorMessage(null);
     setIsScanning(true);
+    setScanProgress(10);
     setScanStep('Đang giải nén cấu trúc tệp tin APK...');
 
     try {
       await new Promise((r) => setTimeout(r, 400));
+      setScanProgress(30);
       setScanStep('Đang trích xuất AndroidManifest.xml...');
 
       await new Promise((r) => setTimeout(r, 400));
+      setScanProgress(55);
       setScanStep('Đang đối soát quyền với danh mục ' + CATEGORIES_INFO[selectedCategory].nameVi + '...');
 
       const result = await parseApkFile(file, selectedCategory);
 
       await new Promise((r) => setTimeout(r, 300));
+      setScanProgress(85);
       setScanStep('Đang tính toán chỉ số tuân thủ dữ liệu...');
 
       await new Promise((r) => setTimeout(r, 200));
+      setScanProgress(100);
       setScanResult(result);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -73,6 +84,7 @@ export const ApkScannerView: React.FC<ApkScannerViewProps> = ({
     } finally {
       setIsScanning(false);
       setScanStep('');
+      setScanProgress(0);
     }
   };
 
@@ -90,24 +102,22 @@ export const ApkScannerView: React.FC<ApkScannerViewProps> = ({
     }
   };
 
+  // Fix #3: Dùng thẳng sample data, không re-evaluate → giữ nguyên text giải thích đã viết tay
+  // Fix #4: Reset search/filter khi load sample mới để tránh bảng hiển thị trống
   const handleLoadSample = (sample: ApkScanResult) => {
     setErrorMessage(null);
     setIsScanning(true);
     setSelectedCategory(sample.appCategory);
+    setSearchQuery('');
+    setFilterMode('all');
+    setScanProgress(60);
     setScanStep('Đang nạp hồ sơ kiểm toán mẫu...');
 
     setTimeout(() => {
-      const evaluated = evaluatePermissions(
-        sample.permissions.map((p) => p.name),
-        sample.appCategory,
-        sample.appName,
-        sample.packageName,
-        sample.version,
-        sample.fileSizeMb
-      );
-      setScanResult(evaluated);
+      setScanResult(sample);
       setIsScanning(false);
       setScanStep('');
+      setScanProgress(0);
     }, 350);
   };
 
@@ -126,6 +136,7 @@ export const ApkScannerView: React.FC<ApkScannerViewProps> = ({
     }
   };
 
+  // Fix #10: Bổ sung violationsSummary chi tiết vào nội dung clipboard để đủ thông tin nộp hồ sơ
   const handleCopyReport = () => {
     if (!scanResult) return;
     const reportText = `--- BÁO CÁO KIỂM TOÁN QUYỀN ỨNG DỤNG (APK COMPLIANCE REPORT) ---
@@ -144,6 +155,11 @@ ${scanResult.permissions
             `- [${p.status === 'valid' ? 'HỢP LÝ' : 'VI PHẠM'}] ${p.name}: ${p.categoryExplanation}`
         )
         .join('\n')}
+
+VI PHẠM PHÁP LÝ PHÁT HIỆN (${scanResult.violationCount} vi phạm):
+${scanResult.violationsSummary.length > 0
+        ? scanResult.violationsSummary.map((v) => `⚠ ${v}`).join('\n')
+        : '✓ Không phát hiện vi phạm pháp lý nào trong phiên kiểm toán này.'}
 
 KHUYẾN NGHỊ KHẮC PHỤC (REMEDIATION ROADMAP):
 ${scanResult.recommendations.map((r) => `* ${r}`).join('\n')}
@@ -338,7 +354,10 @@ Xác thực bởi Privacy Compass Enterprise`;
                 <span className="font-mono text-slate-500">{scanStep}</span>
               </div>
               <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                <div className="bg-slate-900 h-1.5 rounded-full animate-pulse w-3/4" />
+                <div
+                  className="bg-slate-900 h-1.5 rounded-full transition-all duration-500"
+                  style={{ width: `${scanProgress}%` }}
+                />
               </div>
             </div>
           )}
@@ -478,6 +497,86 @@ Xác thực bởi Privacy Compass Enterprise`;
                 <div className="text-[11px] text-slate-500">Vi phạm tối thiểu hóa dữ liệu</div>
                 <div className={`text-lg font-bold mt-0.5 tabular-nums ${scanResult.violationCount > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
                   {scanResult.violationCount}
+                </div>
+              </div>
+            </div>
+
+            {/* Fix #7: Permission Distribution Charts — dùng Recharts đã cài sẵn */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+              {/* Donut chart 1: Hợp lệ vs Vi phạm */}
+              <div className="space-y-2">
+                <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Phân bố kết quả đánh giá</h4>
+                <div className="h-44">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Hợp lệ', value: scanResult.totalPermissions - scanResult.violationCount },
+                          { name: 'Vi phạm', value: scanResult.violationCount },
+                        ].filter((d) => d.value > 0)}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={42}
+                        outerRadius={68}
+                        dataKey="value"
+                        strokeWidth={2}
+                      >
+                        <Cell fill="#10b981" stroke="#d1fae5" />
+                        <Cell fill="#f43f5e" stroke="#ffe4e6" />
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: number, name: string) => [`${value} quyền`, name]}
+                        contentStyle={{ fontSize: '11px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-600">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />
+                    Hợp lệ ({scanResult.totalPermissions - scanResult.violationCount})
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" />
+                    Vi phạm ({scanResult.violationCount})
+                  </span>
+                </div>
+              </div>
+
+              {/* Donut chart 2: Phân loại mức độ rủi ro */}
+              <div className="space-y-2">
+                <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Phân loại mức độ rủi ro</h4>
+                <div className="h-44">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={[
+                          { name: 'Thấp (LOW)', value: scanResult.permissions.filter((p) => p.riskLevel === 'LOW').length },
+                          { name: 'Trung bình (MEDIUM)', value: scanResult.permissions.filter((p) => p.riskLevel === 'MEDIUM').length },
+                          { name: 'Cao (HIGH)', value: scanResult.permissions.filter((p) => p.riskLevel === 'HIGH').length },
+                        ].filter((d) => d.value > 0)}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={42}
+                        outerRadius={68}
+                        dataKey="value"
+                        strokeWidth={2}
+                      >
+                        <Cell fill="#64748b" stroke="#f1f5f9" />
+                        <Cell fill="#f59e0b" stroke="#fef3c7" />
+                        <Cell fill="#f43f5e" stroke="#ffe4e6" />
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: number, name: string) => [`${value} quyền`, name]}
+                        contentStyle={{ fontSize: '11px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-500 inline-block" />LOW ({scanResult.permissions.filter((p) => p.riskLevel === 'LOW').length})</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" />MEDIUM ({scanResult.permissions.filter((p) => p.riskLevel === 'MEDIUM').length})</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" />HIGH ({scanResult.permissions.filter((p) => p.riskLevel === 'HIGH').length})</span>
                 </div>
               </div>
             </div>

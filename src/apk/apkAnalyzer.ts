@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { ApkScanResult, AppCategory, PermissionDetail } from '../types';
-import { ANDROID_PERMISSIONS_DB, CATEGORIES_INFO } from './permissionRef';
+import { ANDROID_PERMISSIONS_DB, CATEGORIES_INFO, PermissionDefinition } from './permissionRef';
 
 /**
  * Parses binary Android XML (AXML) string pool to extract all referenced permission strings and package names.
@@ -90,7 +90,8 @@ export function evaluatePermissions(
   const recommendations: string[] = [];
 
   for (const permName of permissionNames) {
-    const meta = ANDROID_PERMISSIONS_DB[permName] || {
+    // Type tường minh để fix lỗi TS: fallback object có generalRisk: 'LOW' bị suy luận là string nếu không khai báo kiểu rõ
+    const meta: PermissionDefinition = ANDROID_PERMISSIONS_DB[permName] ?? {
       shortName: permName.replace('android.permission.', ''),
       isDangerous: false,
       categoryDesc: 'Quyền ứng dụng tiêu chuẩn Android',
@@ -151,15 +152,18 @@ export function evaluatePermissions(
     });
   }
 
-  // Calculate compliance score (0 - 100)
-  // Base 100 points
-  // Each dangerous violation deducts 20 points
-  // Each medium violation deducts 10 points
+  // Fix #5: Công thức lũy tiến — HIGH violation đầu = -25 điểm, mỗi HIGH vi phạm tiếp theo tăng thêm -8
+  // Điều này khắc phục nghịch lý: 1 READ_SMS (HIGH) = 75pts YELLOW thay vì 78pts cũ
+  // nhưng 2 vi phạm HIGH nghiêm trọng → 75 - 33 = 42 RED đúng với mức độ nguy hiểm thực tế
   let score = 100;
+  let highViolationIdx = 0;
+
   for (const p of processedPermissions) {
     if (p.status === 'violation') {
       if (p.riskLevel === 'HIGH') {
-        score -= 22;
+        // Progressive penalty: 25, 33, 41, 49, ... (tăng dần theo từng vi phạm HIGH)
+        score -= (25 + highViolationIdx * 8);
+        highViolationIdx++;
       } else if (p.riskLevel === 'MEDIUM') {
         score -= 12;
       }
