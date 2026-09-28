@@ -1,16 +1,16 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { 
-  Upload, 
-  FileCode, 
-  CheckCircle2, 
-  XCircle, 
-  AlertTriangle, 
-  ArrowLeft, 
-  RotateCcw, 
-  ShieldCheck, 
-  ShieldAlert, 
-  Copy, 
-  Check, 
+import {
+  Upload,
+  FileCode,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  ArrowLeft,
+  RotateCcw,
+  ShieldCheck,
+  ShieldAlert,
+  Copy,
+  Check,
   Info,
   Search,
   Filter,
@@ -18,9 +18,9 @@ import {
   Printer
 } from 'lucide-react';
 import { ApkScanResult, AppCategory, PermissionDetail } from '../types';
-import { CATEGORIES_INFO } from '../data/permissionRef';
-import { SAMPLE_APKS } from '../data/sampleApks';
-import { parseApkFile, evaluatePermissions } from '../utils/apkAnalyzer';
+import { CATEGORIES_INFO } from './permissionRef';
+import { SAMPLE_APKS } from './sampleApks';
+import { parseApkFile, evaluatePermissions } from './apkAnalyzer';
 
 interface ApkScannerViewProps {
   onBackToHome: () => void;
@@ -40,7 +40,7 @@ export const ApkScannerView: React.FC<ApkScannerViewProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [copiedReport, setCopiedReport] = useState(false);
   const [dragOver, setDragOver] = useState(false);
-  
+
   // Table search & filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'dangerous' | 'violations'>('all');
@@ -56,15 +56,15 @@ export const ApkScannerView: React.FC<ApkScannerViewProps> = ({
     try {
       await new Promise((r) => setTimeout(r, 400));
       setScanStep('Đang trích xuất AndroidManifest.xml...');
-      
+
       await new Promise((r) => setTimeout(r, 400));
       setScanStep('Đang đối soát quyền với danh mục ' + CATEGORIES_INFO[selectedCategory].nameVi + '...');
-      
+
       const result = await parseApkFile(file, selectedCategory);
-      
+
       await new Promise((r) => setTimeout(r, 300));
       setScanStep('Đang tính toán chỉ số tuân thủ dữ liệu...');
-      
+
       await new Promise((r) => setTimeout(r, 200));
       setScanResult(result);
     } catch (err: unknown) {
@@ -139,11 +139,11 @@ Số vi phạm phát hiện: ${scanResult.violationCount}
 
 KẾT QUẢ ĐỐI SOÁT QUYỀN:
 ${scanResult.permissions
-  .map(
-    (p) =>
-      `- [${p.status === 'valid' ? 'HỢP LÝ' : 'VI PHẠM'}] ${p.name}: ${p.categoryExplanation}`
-  )
-  .join('\n')}
+        .map(
+          (p) =>
+            `- [${p.status === 'valid' ? 'HỢP LÝ' : 'VI PHẠM'}] ${p.name}: ${p.categoryExplanation}`
+        )
+        .join('\n')}
 
 KHUYẾN NGHỊ KHẮC PHỤC (REMEDIATION ROADMAP):
 ${scanResult.recommendations.map((r) => `* ${r}`).join('\n')}
@@ -279,9 +279,8 @@ Xác thực bởi Privacy Compass Enterprise`;
             }}
             onDragLeave={() => setDragOver(false)}
             onDrop={handleDrop}
-            className={`rounded-2xl border-2 border-dashed p-10 sm:p-14 text-center transition-all bg-white ${
-              dragOver ? 'border-slate-900 bg-slate-50/80' : 'border-slate-300 hover:border-slate-400'
-            }`}
+            className={`rounded-2xl border-2 border-dashed p-10 sm:p-14 text-center transition-all bg-white ${dragOver ? 'border-slate-900 bg-slate-50/80' : 'border-slate-300 hover:border-slate-400'
+              }`}
           >
             <input
               type="file"
@@ -367,13 +366,12 @@ Xác thực bởi Privacy Compass Enterprise`;
                       {sample.appName}
                     </span>
                     <span
-                      className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                        sample.complianceRating === 'RED'
-                          ? 'bg-rose-50 text-rose-700'
-                          : sample.complianceRating === 'YELLOW'
+                      className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${sample.complianceRating === 'RED'
+                        ? 'bg-rose-50 text-rose-700'
+                        : sample.complianceRating === 'YELLOW'
                           ? 'bg-amber-50 text-amber-800'
                           : 'bg-emerald-50 text-emerald-700'
-                      }`}
+                        }`}
                     >
                       {sample.complianceScore}/100
                     </span>
@@ -440,13 +438,12 @@ Xác thực bởi Privacy Compass Enterprise`;
                     <span className="text-sm font-normal text-slate-400"> / 100</span>
                   </div>
                   <div
-                    className={`text-[11px] font-bold mt-1 ${
-                      scanResult.complianceRating === 'RED'
-                        ? 'text-rose-700'
-                        : scanResult.complianceRating === 'YELLOW'
+                    className={`text-[11px] font-bold mt-1 ${scanResult.complianceRating === 'RED'
+                      ? 'text-rose-700'
+                      : scanResult.complianceRating === 'YELLOW'
                         ? 'text-amber-700'
                         : 'text-emerald-700'
-                    }`}
+                      }`}
                   >
                     {scanResult.ratingLabel}
                   </div>
@@ -531,25 +528,22 @@ Xác thực bởi Privacy Compass Enterprise`;
                 <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-100 border border-slate-200 text-xs">
                   <button
                     onClick={() => setFilterMode('all')}
-                    className={`px-2.5 py-1 rounded font-medium transition-colors ${
-                      filterMode === 'all' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
-                    }`}
+                    className={`px-2.5 py-1 rounded font-medium transition-colors ${filterMode === 'all' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+                      }`}
                   >
                     Tất cả
                   </button>
                   <button
                     onClick={() => setFilterMode('dangerous')}
-                    className={`px-2.5 py-1 rounded font-medium transition-colors ${
-                      filterMode === 'dangerous' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
-                    }`}
+                    className={`px-2.5 py-1 rounded font-medium transition-colors ${filterMode === 'dangerous' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+                      }`}
                   >
                     Nguy hại
                   </button>
                   <button
                     onClick={() => setFilterMode('violations')}
-                    className={`px-2.5 py-1 rounded font-medium transition-colors ${
-                      filterMode === 'violations' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
-                    }`}
+                    className={`px-2.5 py-1 rounded font-medium transition-colors ${filterMode === 'violations' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+                      }`}
                   >
                     Vi phạm
                   </button>
@@ -597,13 +591,12 @@ Xác thực bởi Privacy Compass Enterprise`;
 
                         <td className="p-3 font-mono">
                           <span
-                            className={`font-semibold px-2 py-0.5 rounded text-[10px] ${
-                              perm.riskLevel === 'HIGH'
-                                ? 'bg-rose-50 text-rose-700'
-                                : perm.riskLevel === 'MEDIUM'
+                            className={`font-semibold px-2 py-0.5 rounded text-[10px] ${perm.riskLevel === 'HIGH'
+                              ? 'bg-rose-50 text-rose-700'
+                              : perm.riskLevel === 'MEDIUM'
                                 ? 'bg-amber-50 text-amber-800'
                                 : 'bg-slate-100 text-slate-600'
-                            }`}
+                              }`}
                           >
                             {perm.riskLevel}
                           </span>

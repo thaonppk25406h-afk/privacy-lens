@@ -1,6 +1,6 @@
 import JSZip from 'jszip';
 import { ApkScanResult, AppCategory, PermissionDetail } from '../types';
-import { ANDROID_PERMISSIONS_DB, CATEGORIES_INFO } from '../data/permissionRef';
+import { ANDROID_PERMISSIONS_DB, CATEGORIES_INFO } from './permissionRef';
 
 /**
  * Parses binary Android XML (AXML) string pool to extract all referenced permission strings and package names.

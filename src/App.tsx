@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { Navbar, NavTab } from './components/Navbar';
-import { HomeView } from './components/HomeView';
-import { ApkScannerView } from './components/ApkScannerView';
-import { PolicySummarizerView } from './components/PolicySummarizerView';
-import { RegulationsView } from './components/RegulationsView';
-import { PricingView } from './components/PricingView';
-import { Footer } from './components/Footer';
-import { AuditCertificateModal } from './components/AuditCertificateModal';
-import { SAMPLE_APKS } from './data/sampleApks';
-import { PRELOADED_POLICIES } from './data/preloadedPolicies';
+import { Navbar, NavTab } from './frontend/Navbar';
+import { HomeView } from './frontend/HomeView';
+import { ApkScannerView } from './apk/ApkScannerView';
+import { PolicySummarizerView } from './policy/PolicySummarizerView';
+import { RegulationsView } from './frontend/RegulationsView';
+import { PricingView } from './frontend/PricingView';
+import { Footer } from './frontend/Footer';
+import { AuditCertificateModal } from './frontend/AuditCertificateModal';
+import { SAMPLE_APKS } from './apk/sampleApks';
+import { PRELOADED_POLICIES } from './policy/preloadedPolicies';
 import { ApkScanResult, PolicySummaryResult } from './types';
 
 export default function App() {

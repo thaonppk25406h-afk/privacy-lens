@@ -1,6 +1,6 @@
 import React from 'react';
 import { Scale, BookOpen, ShieldAlert, CheckCircle2, Shield, AlertTriangle } from 'lucide-react';
-import { ANDROID_PERMISSIONS_DB } from '../data/permissionRef';
+import { ANDROID_PERMISSIONS_DB } from '../apk/permissionRef';
 
 export const RegulationsView: React.FC = () => {
   return (
@@ -40,7 +40,7 @@ export const RegulationsView: React.FC = () => {
               <strong>Căn cứ:</strong> GDPR Điều 6 & 7; Nghị định 13/2023 Điều 11; Luật 2025 Điều 9.
             </p>
             <p className="text-xs text-slate-700 leading-relaxed">
-              Thu thập dữ liệu cá nhân chỉ hợp pháp khi có sự đồng ý tự nguyện, được thông báo trước, rõ ràng và có thể rút lại bất cứ lúc nào. 
+              Thu thập dữ liệu cá nhân chỉ hợp pháp khi có sự đồng ý tự nguyện, được thông báo trước, rõ ràng và có thể rút lại bất cứ lúc nào.
               Nghiêm cấm hành vi &quot;Take-it-or-leave-it&quot; (bắt buộc đồng ý chia sẻ dữ liệu ngoài chức năng cơ bản).
             </p>
           </div>
@@ -67,7 +67,7 @@ export const RegulationsView: React.FC = () => {
               <strong>Căn cứ:</strong> GDPR Điều 5(1)(c); Luật BV Dữ Liệu Cá Nhân 2025 Điều 6.
             </p>
             <p className="text-xs text-slate-700 leading-relaxed">
-              Chỉ được phép thu thập những dữ liệu thực sự cần thiết, thỏa đáng và giới hạn ở mức tối thiểu phục vụ cho mục đích đã nêu. 
+              Chỉ được phép thu thập những dữ liệu thực sự cần thiết, thỏa đáng và giới hạn ở mức tối thiểu phục vụ cho mục đích đã nêu.
               Các ứng dụng tiện ích đơn giản không được đòi hỏi quyền đọc danh bạ, tin nhắn SMS hoặc vị trí nền.
             </p>
           </div>
@@ -81,7 +81,7 @@ export const RegulationsView: React.FC = () => {
               <strong>Căn cứ:</strong> GDPR Điều 5(1)(e) & Điều 13; Nghị định 13/2023 Điều 13.
             </p>
             <p className="text-xs text-slate-700 leading-relaxed">
-              Chính sách phải dùng ngôn ngữ dễ hiểu, chỉ rõ danh tính các bên thứ ba nhận dữ liệu và thời hạn lưu trữ cụ thể. 
+              Chính sách phải dùng ngôn ngữ dễ hiểu, chỉ rõ danh tính các bên thứ ba nhận dữ liệu và thời hạn lưu trữ cụ thể.
               Không sử dụng các cụm từ mơ hồ như &quot;lưu trữ vĩnh viễn&quot; hay &quot;chia sẻ đối tác chiến lược không xác định&quot;.
             </p>
           </div>
@@ -143,13 +143,12 @@ export const RegulationsView: React.FC = () => {
                   </td>
                   <td className="p-3 font-mono">
                     <span
-                      className={`font-semibold px-2 py-0.5 rounded text-[10px] ${
-                        meta.generalRisk === 'HIGH'
+                      className={`font-semibold px-2 py-0.5 rounded text-[10px] ${meta.generalRisk === 'HIGH'
                           ? 'bg-rose-50 text-rose-700'
                           : meta.generalRisk === 'MEDIUM'
-                          ? 'bg-amber-50 text-amber-800'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
+                            ? 'bg-amber-50 text-amber-800'
+                            : 'bg-slate-100 text-slate-600'
+                        }`}
                     >
                       {meta.generalRisk}
                     </span>

@@ -1,22 +1,22 @@
 import React, { useState } from 'react';
-import { 
-  FileText, 
-  Globe, 
-  ArrowLeft, 
-  RotateCcw, 
-  Copy, 
-  Check, 
-  AlertTriangle, 
-  ShieldCheck, 
-  ExternalLink, 
-  CheckCircle2, 
+import {
+  FileText,
+  Globe,
+  ArrowLeft,
+  RotateCcw,
+  Copy,
+  Check,
+  AlertTriangle,
+  ShieldCheck,
+  ExternalLink,
+  CheckCircle2,
   XCircle,
   Edit3,
   Scale,
   Printer
 } from 'lucide-react';
 import { PolicySummaryResult } from '../types';
-import { PRELOADED_POLICIES } from '../data/preloadedPolicies';
+import { PRELOADED_POLICIES } from './preloadedPolicies';
 
 interface PolicySummarizerViewProps {
   onBackToHome: () => void;
@@ -153,16 +153,15 @@ Risk Score: ${result.riskScore}/100 [${result.riskRating} - ${result.ratingLabel
 5. Quyền của chủ thể dữ liệu: ${result.fivePoints.userRights}
 
 CẢNH BÁO RỦI RO PHÁP LÝ:
-${
-  result.violations.length === 0
-    ? 'Không phát hiện vi phạm pháp lý nghiêm trọng đối với 5 quy tắc vàng.'
-    : result.violations
-        .map(
-          (v) =>
-            `- [${v.severity}] ${v.title} (${v.ruleViolated}): ${v.detail} [${v.legalBasis}]`
-        )
-        .join('\n')
-}
+${result.violations.length === 0
+        ? 'Không phát hiện vi phạm pháp lý nghiêm trọng đối với 5 quy tắc vàng.'
+        : result.violations
+          .map(
+            (v) =>
+              `- [${v.severity}] ${v.title} (${v.ruleViolated}): ${v.detail} [${v.legalBasis}]`
+          )
+          .join('\n')
+      }
 
 LỘ TRÌNH KHUYẾN NGHỊ TUÂN THỦ:
 ${result.recommendations.map((r) => `* ${r}`).join('\n')}
@@ -240,9 +239,8 @@ Xác thực bởi Privacy Compass Enterprise`;
               <button
                 type="button"
                 onClick={() => setInputMode('url')}
-                className={`px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
-                  inputMode === 'url' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
-                }`}
+                className={`px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${inputMode === 'url' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+                  }`}
               >
                 <Globe className="w-3.5 h-3.5" />
                 <span>Đường dẫn URL Website</span>
@@ -250,9 +248,8 @@ Xác thực bởi Privacy Compass Enterprise`;
               <button
                 type="button"
                 onClick={() => setInputMode('text')}
-                className={`px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${
-                  inputMode === 'text' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
-                }`}
+                className={`px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${inputMode === 'text' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+                  }`}
               >
                 <Edit3 className="w-3.5 h-3.5" />
                 <span>Dán văn bản điều khoản</span>
@@ -384,13 +381,12 @@ Xác thực bởi Privacy Compass Enterprise`;
                       {sample.name}
                     </span>
                     <span
-                      className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                        sample.analyzedResult.riskRating === 'HIGH'
+                      className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${sample.analyzedResult.riskRating === 'HIGH'
                           ? 'bg-rose-50 text-rose-700'
                           : sample.analyzedResult.riskRating === 'MEDIUM'
-                          ? 'bg-amber-50 text-amber-800'
-                          : 'bg-emerald-50 text-emerald-700'
-                      }`}
+                            ? 'bg-amber-50 text-amber-800'
+                            : 'bg-emerald-50 text-emerald-700'
+                        }`}
                     >
                       {sample.analyzedResult.riskScore}/100
                     </span>
@@ -453,13 +449,12 @@ Xác thực bởi Privacy Compass Enterprise`;
                     <span className="text-sm font-normal text-slate-400"> / 100</span>
                   </div>
                   <div
-                    className={`text-[11px] font-bold mt-1 ${
-                      result.riskRating === 'HIGH'
+                    className={`text-[11px] font-bold mt-1 ${result.riskRating === 'HIGH'
                         ? 'text-rose-700'
                         : result.riskRating === 'MEDIUM'
-                        ? 'text-amber-700'
-                        : 'text-emerald-700'
-                    }`}
+                          ? 'text-amber-700'
+                          : 'text-emerald-700'
+                      }`}
                   >
                     {result.ratingLabel}
                   </div>
@@ -594,11 +589,10 @@ Xác thực bởi Privacy Compass Enterprise`;
                         <span>{v.title}</span>
                       </div>
                       <span
-                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded self-start sm:self-auto ${
-                          v.severity === 'HIGH'
+                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded self-start sm:self-auto ${v.severity === 'HIGH'
                             ? 'bg-rose-50 text-rose-700'
                             : 'bg-amber-50 text-amber-800'
-                        }`}
+                          }`}
                       >
                         Mức độ: {v.severity}
                       </span>
