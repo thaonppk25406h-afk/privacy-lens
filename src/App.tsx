@@ -4,7 +4,6 @@ import { HomeView } from './frontend/HomeView';
 import { ApkScannerView } from './apk/ApkScannerView';
 import { PolicySummarizerView } from './policy/PolicySummarizerView';
 import { RegulationsView } from './frontend/RegulationsView';
-import { PricingView } from './frontend/PricingView';
 import { Footer } from './frontend/Footer';
 import { AuditCertificateModal } from './frontend/AuditCertificateModal';
 import { SAMPLE_APKS } from './apk/sampleApks';
@@ -76,9 +75,6 @@ export default function App() {
           <RegulationsView />
         )}
 
-        {currentTab === 'pricing' && (
-          <PricingView onStartAudit={() => handleTabChange('apk_scanner')} />
-        )}
       </main>
 
       {/* Formal Audit Certificate Printable Modal */}

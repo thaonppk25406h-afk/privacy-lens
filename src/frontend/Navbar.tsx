@@ -1,7 +1,7 @@
 import React from 'react';
 import { Shield, Smartphone, FileText, BookOpen, Layers, CheckCircle } from 'lucide-react';
 
-export type NavTab = 'home' | 'apk_scanner' | 'policy_summarizer' | 'regulations' | 'pricing';
+export type NavTab = 'home' | 'apk_scanner' | 'policy_summarizer' | 'regulations';
 
 interface NavbarProps {
   currentTab: NavTab;
@@ -15,7 +15,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab, onOpenC
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Brand Wordmark (Zone 1) */}
-          <div 
+          <div
             className="flex items-center gap-3 cursor-pointer group select-none"
             onClick={() => onSelectTab('home')}
           >
@@ -34,48 +34,36 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab, onOpenC
           <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-600">
             <button
               onClick={() => onSelectTab('home')}
-              className={`transition-colors hover:text-slate-900 ${
-                currentTab === 'home' ? 'text-slate-900 font-semibold' : ''
-              }`}
+              className={`transition-colors hover:text-slate-900 ${currentTab === 'home' ? 'text-slate-900 font-semibold' : ''
+                }`}
             >
               Tổng quan
             </button>
 
             <button
               onClick={() => onSelectTab('apk_scanner')}
-              className={`transition-colors hover:text-slate-900 flex items-center gap-1.5 ${
-                currentTab === 'apk_scanner' ? 'text-slate-900 font-semibold' : ''
-              }`}
+              className={`transition-colors hover:text-slate-900 flex items-center gap-1.5 ${currentTab === 'apk_scanner' ? 'text-slate-900 font-semibold' : ''
+                }`}
             >
               <span>Kiểm toán APK</span>
             </button>
 
             <button
               onClick={() => onSelectTab('policy_summarizer')}
-              className={`transition-colors hover:text-slate-900 flex items-center gap-1.5 ${
-                currentTab === 'policy_summarizer' ? 'text-slate-900 font-semibold' : ''
-              }`}
+              className={`transition-colors hover:text-slate-900 flex items-center gap-1.5 ${currentTab === 'policy_summarizer' ? 'text-slate-900 font-semibold' : ''
+                }`}
             >
               <span>Soát xét Chính sách</span>
             </button>
 
             <button
               onClick={() => onSelectTab('regulations')}
-              className={`transition-colors hover:text-slate-900 ${
-                currentTab === 'regulations' ? 'text-slate-900 font-semibold' : ''
-              }`}
+              className={`transition-colors hover:text-slate-900 ${currentTab === 'regulations' ? 'text-slate-900 font-semibold' : ''
+                }`}
             >
               Khung pháp lý
             </button>
 
-            <button
-              onClick={() => onSelectTab('pricing')}
-              className={`transition-colors hover:text-slate-900 ${
-                currentTab === 'pricing' ? 'text-slate-900 font-semibold' : ''
-              }`}
-            >
-              Gói thương mại
-            </button>
           </nav>
 
           {/* Action Zone (Zone 3) */}
