@@ -1,0 +1,6 @@
+{
+  "name": "Privacy Compass - La Bàn Bảo Mật",
+  "description": "Công cụ kiểm tra tuân thủ bảo mật dữ liệu trên Mobile App: APK Scanner & Policy Summarizer chuẩn GDPR và Luật Bảo vệ dữ liệu cá nhân",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
