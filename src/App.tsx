@@ -35,6 +35,12 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Fix #1: Sync ApkScanResult back to App-level state so navigating away
+  // and returning doesn't restore a stale initialScanResult
+  const handleApkScanComplete = (result: ApkScanResult | null) => {
+    setActiveApkResult(result);
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans selection:bg-slate-900 selection:text-white">
       {/* Top Navigation */}
@@ -60,6 +66,7 @@ export default function App() {
             onBackToHome={() => handleTabChange('home')}
             initialScanResult={activeApkResult}
             onOpenCertificate={() => setIsCertificateOpen(true)}
+            onScanComplete={handleApkScanComplete}
           />
         )}
 
