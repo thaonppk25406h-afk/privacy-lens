@@ -23,7 +23,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onSelectTab, onOpenC
               <Shield className="w-5 h-5 text-indigo-400" />
             </div>
             <div className="flex items-baseline gap-1.5">
-              <span className="font-bold text-lg text-slate-900 tracking-tight">Privacy Compass</span>
+              <span className="font-bold text-lg text-slate-900 tracking-tight">Privacy Lens</span>
               <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider hidden sm:inline">
                 Enterprise
               </span>
