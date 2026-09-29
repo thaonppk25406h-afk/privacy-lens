@@ -437,4 +437,11 @@ export const ANDROID_PERMISSIONS_DB: Record<string, PermissionDefinition> = {
     categoryDesc: 'Tự động nghe cuộc gọi đến mà không cần người dùng chấp nhận — nguy hiểm cao',
     generalRisk: 'HIGH',
   },
+  // Android 13+ scoped media permissions — READ_MEDIA_IMAGES còn thiếu, khi thiếu fallback sai về isDangerous=false
+  'android.permission.READ_MEDIA_IMAGES': {
+    shortName: 'READ_MEDIA_IMAGES',
+    isDangerous: true,
+    categoryDesc: 'Đọc ảnh từ thư viện bộ nhớ ngoài (thay thế READ_EXTERNAL_STORAGE trên Android 13+)',
+    generalRisk: 'MEDIUM',
+  },
 };

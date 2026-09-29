@@ -1,19 +1,15 @@
 import React, { useState, useRef, useMemo } from 'react';
 import {
   Upload,
-  FileCode,
   CheckCircle2,
   XCircle,
   AlertTriangle,
   ArrowLeft,
   RotateCcw,
-  ShieldCheck,
   ShieldAlert,
   Copy,
   Check,
-  Info,
   Search,
-  Filter,
   FileCheck2,
   Printer
 } from 'lucide-react';
@@ -27,12 +23,15 @@ interface ApkScannerViewProps {
   onBackToHome: () => void;
   initialScanResult?: ApkScanResult | null;
   onOpenCertificate?: () => void;
+  /** Fix #1: Callback so App.tsx can sync the latest scan result (or null on reset) */
+  onScanComplete?: (result: ApkScanResult | null) => void;
 }
 
 export const ApkScannerView: React.FC<ApkScannerViewProps> = ({
   onBackToHome,
   initialScanResult = null,
   onOpenCertificate,
+  onScanComplete,
 }) => {
   // Fix #1: sync selectedCategory với initialScanResult.appCategory thay vì luôn mặc định 'flashlight'
   const [selectedCategory, setSelectedCategory] = useState<AppCategory>(
@@ -50,6 +49,19 @@ export const ApkScannerView: React.FC<ApkScannerViewProps> = ({
   // Table search & filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'dangerous' | 'violations'>('all');
+
+  // Fix #7: Sort state for permissions table
+  const [sortField, setSortField] = useState<'shortName' | 'riskLevel' | 'status' | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  const handleSort = (field: 'shortName' | 'riskLevel' | 'status') => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -78,6 +90,7 @@ export const ApkScannerView: React.FC<ApkScannerViewProps> = ({
       await new Promise((r) => setTimeout(r, 200));
       setScanProgress(100);
       setScanResult(result);
+      onScanComplete?.(result); // Fix #1: sync lên App.tsx
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       setErrorMessage(msg);
@@ -115,6 +128,7 @@ export const ApkScannerView: React.FC<ApkScannerViewProps> = ({
 
     setTimeout(() => {
       setScanResult(sample);
+      onScanComplete?.(sample); // Fix #1: sync lên App.tsx
       setIsScanning(false);
       setScanStep('');
       setScanProgress(0);
@@ -133,6 +147,8 @@ export const ApkScannerView: React.FC<ApkScannerViewProps> = ({
         scanResult.fileSizeMb
       );
       setScanResult(updated);
+      // Fix: Sync lên App.tsx để AuditCertificateModal hiện đúng danh mục mới
+      onScanComplete?.(updated);
     }
   };
 
@@ -166,7 +182,16 @@ ${scanResult.recommendations.map((r) => `* ${r}`).join('\n')}
 -------------------------------------------------------
 Xác thực bởi Privacy Compass Enterprise`;
 
-    navigator.clipboard.writeText(reportText);
+    navigator.clipboard.writeText(reportText).catch(() => {
+      // Fix #5: Fallback cho môi trường HTTP hoặc trình duyệt chặn Clipboard API
+      const textarea = document.createElement('textarea');
+      textarea.value = reportText;
+      textarea.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    });
     setCopiedReport(true);
     setTimeout(() => setCopiedReport(false), 2000);
   };
@@ -176,10 +201,23 @@ Xác thực bởi Privacy Compass Enterprise`;
     setErrorMessage(null);
     setSearchQuery('');
     setFilterMode('all');
+    setSortField(null);  // Fix #7: reset sort khi quét file mới
+    setSortDir('asc');
+    onScanComplete?.(null); // Fix #1: báo App.tsx xóa activeApkResult
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
+
+  // Fix #6: Badge counts for filter tabs — stable counts unaffected by search query
+  const filterCounts = useMemo(() => {
+    if (!scanResult) return { all: 0, dangerous: 0, violations: 0 };
+    return {
+      all: scanResult.totalPermissions,
+      dangerous: scanResult.permissions.filter((p) => p.isDangerous).length,
+      violations: scanResult.violationCount,
+    };
+  }, [scanResult]);
 
   // Filtered permissions list
   const filteredPermissions = useMemo(() => {
@@ -199,6 +237,24 @@ Xác thực bởi Privacy Compass Enterprise`;
       return true;
     });
   }, [scanResult, filterMode, searchQuery]);
+
+  // Fix #7: Sorted permissions (applied after filter+search)
+  const sortedPermissions = useMemo(() => {
+    if (!sortField) return filteredPermissions;
+    const riskOrder: Record<string, number> = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+    return [...filteredPermissions].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === 'riskLevel') {
+        cmp = riskOrder[a.riskLevel] - riskOrder[b.riskLevel];
+      } else if (sortField === 'status') {
+        // violations first khi ascending
+        cmp = a.status === b.status ? 0 : a.status === 'violation' ? -1 : 1;
+      } else {
+        cmp = a.shortName.localeCompare(b.shortName);
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [filteredPermissions, sortField, sortDir]);
 
   return (
     <div className="space-y-8 py-2">
@@ -373,12 +429,17 @@ Xác thực bởi Privacy Compass Enterprise`;
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {SAMPLE_APKS.map((sample) => (
                 <div
                   key={sample.packageName}
-                  onClick={() => handleLoadSample(sample)}
-                  className="p-4 rounded-xl border border-slate-200 hover:border-slate-400 bg-white cursor-pointer transition-all space-y-2 group"
+                  onClick={() => !isScanning && handleLoadSample(sample)}
+                  className={`p-4 rounded-xl border bg-white transition-all space-y-2 group ${
+                    isScanning
+                      ? 'border-slate-100 opacity-40 cursor-not-allowed'
+                      : 'border-slate-200 hover:border-slate-400 cursor-pointer'
+                  }`}
+                  title={isScanning ? 'Đang quét file, vui lòng chờ...' : undefined}
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
@@ -525,7 +586,7 @@ Xác thực bởi Privacy Compass Enterprise`;
                         <Cell fill="#f43f5e" stroke="#ffe4e6" />
                       </Pie>
                       <Tooltip
-                        formatter={(value: number, name: string) => [`${value} quyền`, name]}
+                        formatter={(value, name) => [`${value ?? 0} quyền`, name ?? '']}
                         contentStyle={{ fontSize: '11px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
                       />
                     </PieChart>
@@ -567,7 +628,7 @@ Xác thực bởi Privacy Compass Enterprise`;
                         <Cell fill="#f43f5e" stroke="#ffe4e6" />
                       </Pie>
                       <Tooltip
-                        formatter={(value: number, name: string) => [`${value} quyền`, name]}
+                        formatter={(value, name) => [`${value ?? 0} quyền`, name ?? '']}
                         contentStyle={{ fontSize: '11px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
                       />
                     </PieChart>
@@ -602,7 +663,7 @@ Xác thực bởi Privacy Compass Enterprise`;
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
               <div>
                 <h3 className="text-base font-bold text-slate-900">
-                  Danh Mục Quyền Thiết Bị ({filteredPermissions.length} / {scanResult.totalPermissions})
+                  Danh Mục Quyền Thiết Bị ({sortedPermissions.length} / {scanResult.totalPermissions})
                 </h3>
                 <p className="text-xs text-slate-500">
                   Đối soát chi tiết theo yêu cầu danh mục &quot;{scanResult.categoryNameVi}&quot;
@@ -623,28 +684,33 @@ Xác thực bởi Privacy Compass Enterprise`;
                   <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 top-2 pointer-events-none" />
                 </div>
 
-                {/* Filter Segments */}
+                {/* Filter Segments with badge counts — Fix #6 */}
                 <div className="flex items-center gap-1 p-0.5 rounded-lg bg-slate-100 border border-slate-200 text-xs">
                   <button
                     onClick={() => setFilterMode('all')}
-                    className={`px-2.5 py-1 rounded font-medium transition-colors ${filterMode === 'all' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+                    className={`px-2.5 py-1 rounded font-medium transition-colors flex items-center gap-1 ${filterMode === 'all' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
                       }`}
                   >
                     Tất cả
+                    <span className="font-mono text-[10px] bg-slate-200 text-slate-600 px-1 rounded">{filterCounts.all}</span>
                   </button>
                   <button
                     onClick={() => setFilterMode('dangerous')}
-                    className={`px-2.5 py-1 rounded font-medium transition-colors ${filterMode === 'dangerous' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+                    className={`px-2.5 py-1 rounded font-medium transition-colors flex items-center gap-1 ${filterMode === 'dangerous' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
                       }`}
                   >
                     Nguy hại
+                    <span className="font-mono text-[10px] bg-amber-100 text-amber-700 px-1 rounded">{filterCounts.dangerous}</span>
                   </button>
                   <button
                     onClick={() => setFilterMode('violations')}
-                    className={`px-2.5 py-1 rounded font-medium transition-colors ${filterMode === 'violations' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
+                    className={`px-2.5 py-1 rounded font-medium transition-colors flex items-center gap-1 ${filterMode === 'violations' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
                       }`}
                   >
                     Vi phạm
+                    <span className={`font-mono text-[10px] px-1 rounded ${filterCounts.violations > 0 ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-600'}`}>
+                      {filterCounts.violations}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -655,21 +721,40 @@ Xác thực bởi Privacy Compass Enterprise`;
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 border-b border-slate-200">
-                    <th className="p-3 font-semibold">Tên Permission</th>
-                    <th className="p-3 font-semibold">Đánh giá tính hợp lý</th>
-                    <th className="p-3 font-semibold">Mức độ rủi ro</th>
-                    <th className="p-3 font-semibold">Giải trình & Căn cứ kỹ thuật</th>
+                    {/* Fix #7: Sortable headers */}
+                    <th
+                      className="p-3 font-semibold cursor-pointer hover:text-slate-800 select-none whitespace-nowrap"
+                      onClick={() => handleSort('shortName')}
+                      title="Nhấn để sắp xếp theo tên"
+                    >
+                      Tên Permission {sortField === 'shortName' ? (sortDir === 'asc' ? '▲' : '▼') : <span className="opacity-40">⇅</span>}
+                    </th>
+                    <th
+                      className="p-3 font-semibold cursor-pointer hover:text-slate-800 select-none whitespace-nowrap"
+                      onClick={() => handleSort('status')}
+                      title="Nhấn để sắp xếp: vi phạm lên đầu"
+                    >
+                      Đánh giá tính hợp lý {sortField === 'status' ? (sortDir === 'asc' ? '▲' : '▼') : <span className="opacity-40">⇅</span>}
+                    </th>
+                    <th
+                      className="p-3 font-semibold cursor-pointer hover:text-slate-800 select-none whitespace-nowrap"
+                      onClick={() => handleSort('riskLevel')}
+                      title="Nhấn để sắp xếp theo mức rủi ro"
+                    >
+                      Mức độ rủi ro {sortField === 'riskLevel' ? (sortDir === 'asc' ? '▲' : '▼') : <span className="opacity-40">⇅</span>}
+                    </th>
+                    <th className="p-3 font-semibold">Giải trình &amp; Căn cứ kỹ thuật</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-sans">
-                  {filteredPermissions.length === 0 ? (
+                  {sortedPermissions.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="p-8 text-center text-slate-400">
                         Không tìm thấy quyền nào phù hợp với bộ lọc hiện tại.
                       </td>
                     </tr>
                   ) : (
-                    filteredPermissions.map((perm) => (
+                    sortedPermissions.map((perm) => (
                       <tr key={perm.name} className="hover:bg-slate-50/80 transition-colors">
                         <td className="p-3 font-mono">
                           <div className="font-bold text-slate-900">{perm.shortName}</div>

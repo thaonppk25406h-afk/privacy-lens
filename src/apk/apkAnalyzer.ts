@@ -7,21 +7,17 @@ import { ANDROID_PERMISSIONS_DB, CATEGORIES_INFO, PermissionDefinition } from '.
  */
 function extractStringsFromAxml(buffer: ArrayBuffer): string[] {
   const bytes = new Uint8Array(buffer);
-  const strings: string[] = [];
+  // Use Set for O(1) deduplication instead of Array.includes() O(n) inside loop
+  const found = new Set<string>();
 
   // Look for "android.permission." ASCII or UTF-16 patterns
   const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
   const matches = text.match(/android\.permission\.[A-Z0-9_]+/g);
   if (matches) {
-    for (const m of matches) {
-      if (!strings.includes(m)) {
-        strings.push(m);
-      }
-    }
+    for (const m of matches) found.add(m);
   }
 
   // Also check for UTF-16 LE encoded strings
-  const utf16Matches: string[] = [];
   for (let i = 0; i < bytes.length - 38; i += 2) {
     // Check for 'a\0n\0d\0r\0o\0i\0d\0.\0p\0e\0r\0m\0i\0s\0s\0i\0o\0n\0'
     if (
@@ -47,14 +43,13 @@ function extractStringsFromAxml(buffer: ArrayBuffer): string[] {
           break;
         }
       }
-      if (str.startsWith('android.permission.') && !utf16Matches.includes(str)) {
-        utf16Matches.push(str);
+      if (str.startsWith('android.permission.')) {
+        found.add(str);
       }
     }
   }
 
-  const combined = Array.from(new Set([...strings, ...utf16Matches]));
-  return combined;
+  return Array.from(found);
 }
 
 /**
@@ -63,11 +58,31 @@ function extractStringsFromAxml(buffer: ArrayBuffer): string[] {
 function extractPackageName(buffer: ArrayBuffer, fileName: string): string {
   const bytes = new Uint8Array(buffer);
   const text = new TextDecoder('latin1').decode(bytes.slice(0, 4096));
-  const pkgMatch = text.match(/([a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+)/i);
-  if (pkgMatch && pkgMatch[1].includes('.') && pkgMatch[1].length > 6) {
+  // Fix #2: Require >= 3 dot-separated segments starting with lowercase letter to avoid matching
+  // version strings like "1.0.0" or partial URLs like "http.something"
+  const pkgMatch = text.match(/\b([a-z][a-z0-9]{1,}(?:\.[a-z][a-z0-9_]{1,}){2,})\b/);
+  if (pkgMatch && pkgMatch[1].length > 6) {
     return pkgMatch[1];
   }
   return fileName.replace(/\.apk$/i, '').toLowerCase().replace(/[^a-z0-9.]/g, '.');
+}
+
+/**
+ * Attempts to extract android:versionName from manifest.
+ * Works reliably for plain-text XML files; best-effort for binary AXML.
+ */
+function extractVersionFromManifest(buffer: ArrayBuffer): string {
+  const text = new TextDecoder('utf-8', { fatal: false }).decode(
+    new Uint8Array(buffer).slice(0, 8192)
+  );
+  const match =
+    text.match(/android:versionName="([^"]{1,30})"/) ||
+    text.match(/versionName\s*=\s*["']([^"'\s]{1,30})["']/);
+  // Only accept if it starts with a digit (e.g. "2.4.1", "10.0")
+  if (match && match[1] && /^\d/.test(match[1])) {
+    return match[1];
+  }
+  return '1.0.0';
 }
 
 /**
@@ -238,6 +253,7 @@ export async function parseApkFile(
   const arrayBuffer = await file.arrayBuffer();
   let extractedPermissions: string[] = [];
   let detectedPackage = 'com.app.' + fileName.replace(/\.[^/.]+$/, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  let detectedVersion = '1.0.0';
 
   if (isXml) {
     // Text XML parsing
@@ -250,6 +266,8 @@ export async function parseApkFile(
     if (pkgMatch) {
       detectedPackage = pkgMatch[1];
     }
+    // Fix #4: Extract version from XML manifest
+    detectedVersion = extractVersionFromManifest(arrayBuffer);
   } else {
     // Unzip APK archive
     try {
@@ -262,19 +280,17 @@ export async function parseApkFile(
       const manifestBuffer = await manifestFile.async('arraybuffer');
       extractedPermissions = extractStringsFromAxml(manifestBuffer);
       detectedPackage = extractPackageName(manifestBuffer, fileName);
+      // Fix #4: Attempt to read version from binary manifest string pool
+      detectedVersion = extractVersionFromManifest(manifestBuffer);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`Không thể giải nén file APK: ${msg}`);
     }
   }
 
-  // If no permissions found in APK, check standard baseline
-  if (extractedPermissions.length === 0) {
-    extractedPermissions = [
-      'android.permission.INTERNET',
-      'android.permission.ACCESS_NETWORK_STATE',
-    ];
-  }
+  // Fix #3: Removed silent baseline injection — return honest 0-permission result
+  // if binary parsing found nothing. evaluatePermissions handles empty list correctly
+  // (score=100, recommendations note compliance).
 
   const cleanAppName = fileName
     .replace(/\.apk$/i, '')
@@ -287,7 +303,7 @@ export async function parseApkFile(
     category,
     cleanAppName || 'Ứng dụng đã tải lên',
     detectedPackage,
-    '1.0.0',
+    detectedVersion,
     fileSizeMb
   );
 }
