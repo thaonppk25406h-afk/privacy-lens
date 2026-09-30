@@ -14,6 +14,7 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
   const [activeApkResult, setActiveApkResult] = useState<ApkScanResult | null>(null);
   const [activePolicyResult, setActivePolicyResult] = useState<PolicySummaryResult | null>(null);
+  const [activePolicySampleId, setActivePolicySampleId] = useState<string | null>(null);
   const [isCertificateOpen, setIsCertificateOpen] = useState(false);
 
   const handleQuickSampleApk = () => {
@@ -24,8 +25,8 @@ export default function App() {
   };
 
   const handleQuickSamplePolicy = () => {
-    const sample = PRELOADED_POLICIES[0].analyzedResult; // TikTok
-    setActivePolicyResult(sample);
+    setActivePolicyResult(null);
+    setActivePolicySampleId('tiktok');
     setCurrentTab('policy_summarizer');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -74,7 +75,7 @@ export default function App() {
           <PolicySummarizerView
             onBackToHome={() => handleTabChange('home')}
             initialResult={activePolicyResult}
-            onOpenCertificate={() => setIsCertificateOpen(true)}
+            initialSampleId={activePolicySampleId}
           />
         )}
 

@@ -1,4 +1,4 @@
-export type AppCategory = 
+export type AppCategory =
   | 'flashlight'
   | 'calculator'
   | 'social_media'
@@ -39,28 +39,42 @@ export interface ApkScanResult {
   permissions: PermissionDetail[];
 }
 
-export interface GoldenRuleCheck {
-  ruleNumber: number;
-  title: string;
-  criterion: string;
-  passed: boolean;
-  detail: string;
-  legalReference: string;
+export type TieuChiMuc = 'ro_rang' | 'chua_day_du' | 'khong_de_cap';
+
+export interface TieuChiDanhGia {
+  id: number;
+  ten: string;
+  moTa: string;
+  muc: TieuChiMuc;
+  trichDan: string;
+  canCuPhapLy: string;
 }
 
-export interface PolicyViolation {
+// Backward compatibility aliases
+export type GoldenRuleStatus = TieuChiMuc;
+export type GoldenRuleCheck = TieuChiDanhGia;
+
+export interface DiemDangLuuY {
   title: string;
-  ruleViolated: string;
+  tieuChiLienQuan: string;
   legalBasis: string;
   severity: 'HIGH' | 'MEDIUM' | 'LOW';
   detail: string;
+  ruleViolated?: string;
 }
+
+export type PolicyNoteItem = DiemDangLuuY;
+export type PolicyViolation = DiemDangLuuY;
 
 export interface PolicySummaryResult {
   appName: string;
   sourceUrl?: string;
   analyzedAt: string;
   charCount: number;
+  isDemoData?: boolean;
+  policyDate?: string;
+  cachedAt?: string;
+  sampleId?: string;
   fivePoints: {
     collectedData: string;
     purpose: string;
@@ -68,10 +82,9 @@ export interface PolicySummaryResult {
     retentionPeriod: string;
     userRights: string;
   };
-  goldenRules: GoldenRuleCheck[];
-  violations: PolicyViolation[];
-  riskScore: number;
-  riskRating: 'LOW' | 'MEDIUM' | 'HIGH';
-  ratingLabel: string;
+  tieuChiDanhGia: TieuChiDanhGia[];
+  goldenRules?: TieuChiDanhGia[];
+  diemDangLuuY: DiemDangLuuY[];
+  violations?: DiemDangLuuY[];
   recommendations: string[];
 }
