@@ -4,7 +4,6 @@ import { HomeView } from './frontend/HomeView';
 import { ApkScannerView } from './apk/ApkScannerView';
 import { PolicySummarizerView } from './policy/PolicySummarizerView';
 import { RegulationsView } from './frontend/RegulationsView';
-import { PricingView } from './frontend/PricingView';
 import { Footer } from './frontend/Footer';
 import { AuditCertificateModal } from './frontend/AuditCertificateModal';
 import { SAMPLE_APKS } from './apk/sampleApks';
@@ -15,6 +14,7 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
   const [activeApkResult, setActiveApkResult] = useState<ApkScanResult | null>(null);
   const [activePolicyResult, setActivePolicyResult] = useState<PolicySummaryResult | null>(null);
+  const [activePolicySampleId, setActivePolicySampleId] = useState<string | null>(null);
   const [isCertificateOpen, setIsCertificateOpen] = useState(false);
 
   const handleQuickSampleApk = () => {
@@ -25,8 +25,8 @@ export default function App() {
   };
 
   const handleQuickSamplePolicy = () => {
-    const sample = PRELOADED_POLICIES[0].analyzedResult; // TikTok
-    setActivePolicyResult(sample);
+    setActivePolicyResult(null);
+    setActivePolicySampleId('tiktok');
     setCurrentTab('policy_summarizer');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -34,6 +34,12 @@ export default function App() {
   const handleTabChange = (tab: NavTab) => {
     setCurrentTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Fix #1: Sync ApkScanResult back to App-level state so navigating away
+  // and returning doesn't restore a stale initialScanResult
+  const handleApkScanComplete = (result: ApkScanResult | null) => {
+    setActiveApkResult(result);
   };
 
   return (
@@ -61,6 +67,7 @@ export default function App() {
             onBackToHome={() => handleTabChange('home')}
             initialScanResult={activeApkResult}
             onOpenCertificate={() => setIsCertificateOpen(true)}
+            onScanComplete={handleApkScanComplete}
           />
         )}
 
@@ -68,7 +75,7 @@ export default function App() {
           <PolicySummarizerView
             onBackToHome={() => handleTabChange('home')}
             initialResult={activePolicyResult}
-            onOpenCertificate={() => setIsCertificateOpen(true)}
+            initialSampleId={activePolicySampleId}
           />
         )}
 
@@ -76,9 +83,6 @@ export default function App() {
           <RegulationsView />
         )}
 
-        {currentTab === 'pricing' && (
-          <PricingView onStartAudit={() => handleTabChange('apk_scanner')} />
-        )}
       </main>
 
       {/* Formal Audit Certificate Printable Modal */}

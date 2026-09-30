@@ -32,7 +32,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
         </h1>
 
         <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-          Tự động hóa rà soát quyền ứng dụng (Data Minimization) và thẩm định Chính sách bảo mật người dùng. Sẵn sàng phát hành lên Google Play, App Store và vượt qua các đợt thanh tra bảo mật độc lập.
+          Hỗ trợ rà soát tĩnh tệp APK và tóm tắt chính sách bảo mật. Kết quả mang tính tham khảo, không thay thế tư vấn pháp lý.
         </p>
 
         <div className="pt-2 flex flex-wrap gap-3 justify-center items-center">

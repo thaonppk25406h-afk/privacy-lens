@@ -346,4 +346,102 @@ export const ANDROID_PERMISSIONS_DB: Record<string, PermissionDefinition> = {
     categoryDesc: 'Hiển thị cửa sổ nổi đè lên trên các ứng dụng khác (Overlay)',
     generalRisk: 'HIGH',
   },
+  // Fix #3 & #6: Các quyền còn thiếu trong DB gốc — khi thiếu sẽ fallback sai về LOW
+  'android.permission.PROCESS_OUTGOING_CALLS': {
+    shortName: 'PROCESS_OUTGOING_CALLS',
+    isDangerous: true,
+    categoryDesc: 'Chặn hoặc chuyển hướng cuộc gọi ra ngoài, có thể theo dõi toàn bộ hoạt động gọi điện',
+    generalRisk: 'HIGH',
+  },
+  'android.permission.READ_MEDIA_AUDIO': {
+    shortName: 'READ_MEDIA_AUDIO',
+    isDangerous: true,
+    categoryDesc: 'Đọc các file âm thanh (nhạc, podcast, ghi âm) trong bộ nhớ thiết bị',
+    generalRisk: 'MEDIUM',
+  },
+  'android.permission.READ_MEDIA_VIDEO': {
+    shortName: 'READ_MEDIA_VIDEO',
+    isDangerous: true,
+    categoryDesc: 'Đọc các file video trong bộ nhớ thiết bị',
+    generalRisk: 'MEDIUM',
+  },
+  'android.permission.MANAGE_EXTERNAL_STORAGE': {
+    shortName: 'MANAGE_EXTERNAL_STORAGE',
+    isDangerous: true,
+    categoryDesc: 'Toàn quyền quản lý bộ nhớ ngoài, kể cả xóa và sửa file của các ứng dụng khác',
+    generalRisk: 'HIGH',
+  },
+  'android.permission.USE_BIOMETRIC': {
+    shortName: 'USE_BIOMETRIC',
+    isDangerous: true,
+    categoryDesc: 'Truy cập cảm biến vân tay, nhận diện khuôn mặt hoặc các sinh trắc học khác để xác thực',
+    generalRisk: 'HIGH',
+  },
+  'android.permission.USE_FINGERPRINT': {
+    shortName: 'USE_FINGERPRINT',
+    isDangerous: true,
+    categoryDesc: 'Sử dụng đầu đọc vân tay để xác thực danh tính người dùng (API cũ, thay bằng USE_BIOMETRIC)',
+    generalRisk: 'HIGH',
+  },
+  'android.permission.REQUEST_INSTALL_PACKAGES': {
+    shortName: 'REQUEST_INSTALL_PACKAGES',
+    isDangerous: true,
+    categoryDesc: 'Cho phép ứng dụng cài đặt APK từ nguồn ngoài chợ ứng dụng, nguy cơ phát tán mã độc',
+    generalRisk: 'HIGH',
+  },
+  'android.permission.BLUETOOTH_SCAN': {
+    shortName: 'BLUETOOTH_SCAN',
+    isDangerous: true,
+    categoryDesc: 'Quét và phát hiện các thiết bị Bluetooth lân cận, có thể tiết lộ vị trí vật lý người dùng',
+    generalRisk: 'MEDIUM',
+  },
+  'android.permission.BLUETOOTH_CONNECT': {
+    shortName: 'BLUETOOTH_CONNECT',
+    isDangerous: true,
+    categoryDesc: 'Kết nối tới các thiết bị Bluetooth đã ghép đôi',
+    generalRisk: 'MEDIUM',
+  },
+  'android.permission.BIND_ACCESSIBILITY_SERVICE': {
+    shortName: 'BIND_ACCESSIBILITY_SERVICE',
+    isDangerous: true,
+    categoryDesc: 'Đăng ký dịch vụ trợ năng có thể theo dõi toàn bộ thao tác, nội dung màn hình và phím bấm',
+    generalRisk: 'HIGH',
+  },
+  'android.permission.RECEIVE_BOOT_COMPLETED': {
+    shortName: 'RECEIVE_BOOT_COMPLETED',
+    isDangerous: false,
+    categoryDesc: 'Cho phép ứng dụng khởi động tự động ngay khi thiết bị được bật nguồn',
+    generalRisk: 'LOW',
+  },
+  'android.permission.CHANGE_NETWORK_STATE': {
+    shortName: 'CHANGE_NETWORK_STATE',
+    isDangerous: false,
+    categoryDesc: 'Thay đổi trạng thái kết nối mạng như bật/tắt Wi-Fi hoặc dữ liệu di động',
+    generalRisk: 'LOW',
+  },
+  'android.permission.FOREGROUND_SERVICE': {
+    shortName: 'FOREGROUND_SERVICE',
+    isDangerous: false,
+    categoryDesc: 'Chạy dịch vụ nền liên tục được hiển thị qua thông báo cố định trên thanh trạng thái',
+    generalRisk: 'LOW',
+  },
+  'android.permission.READ_PHONE_NUMBERS': {
+    shortName: 'READ_PHONE_NUMBERS',
+    isDangerous: true,
+    categoryDesc: 'Đọc số điện thoại của SIM đang cắm vào thiết bị',
+    generalRisk: 'HIGH',
+  },
+  'android.permission.ANSWER_PHONE_CALLS': {
+    shortName: 'ANSWER_PHONE_CALLS',
+    isDangerous: true,
+    categoryDesc: 'Tự động nghe cuộc gọi đến mà không cần người dùng chấp nhận — nguy hiểm cao',
+    generalRisk: 'HIGH',
+  },
+  // Android 13+ scoped media permissions — READ_MEDIA_IMAGES còn thiếu, khi thiếu fallback sai về isDangerous=false
+  'android.permission.READ_MEDIA_IMAGES': {
+    shortName: 'READ_MEDIA_IMAGES',
+    isDangerous: true,
+    categoryDesc: 'Đọc ảnh từ thư viện bộ nhớ ngoài (thay thế READ_EXTERNAL_STORAGE trên Android 13+)',
+    generalRisk: 'MEDIUM',
+  },
 };
