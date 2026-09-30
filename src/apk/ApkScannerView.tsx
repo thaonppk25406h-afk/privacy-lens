@@ -13,7 +13,7 @@ import {
   FileCheck2,
   Printer
 } from 'lucide-react';
-import { ApkScanResult, AppCategory, PermissionDetail } from '../types';
+import { ApkScanResult, AppCategory } from '../types';
 import { CATEGORIES_INFO } from './permissionRef';
 import { SAMPLE_APKS } from './sampleApks';
 import { parseApkFile, evaluatePermissions } from './apkAnalyzer';
@@ -123,10 +123,11 @@ export const ApkScannerView: React.FC<ApkScannerViewProps> = ({
     setSelectedCategory(sample.appCategory);
     setSearchQuery('');
     setFilterMode('all');
-    setScanProgress(60);
+    setScanProgress(10); // Bắt đầu từ 10% rồi smooth lên 100%
     setScanStep('Đang nạp hồ sơ kiểm toán mẫu...');
 
     setTimeout(() => {
+      setScanProgress(100);
       setScanResult(sample);
       onScanComplete?.(sample); // Fix #1: sync lên App.tsx
       setIsScanning(false);
@@ -204,6 +205,7 @@ Xác thực bởi Privacy Compass Enterprise`;
     setSortField(null);  // Fix #7: reset sort khi quét file mới
     setSortDir('asc');
     onScanComplete?.(null); // Fix #1: báo App.tsx xóa activeApkResult
+    // Intentional: keep selectedCategory so user can re-scan next file in same category
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -255,6 +257,26 @@ Xác thực bởi Privacy Compass Enterprise`;
       return sortDir === 'asc' ? cmp : -cmp;
     });
   }, [filteredPermissions, sortField, sortDir]);
+
+  // Chart data — fill gắn với data object, không phụ thuộc Cell index
+  // Fix Chart 1 bug: khi valid=0, data=[Vi phạm] → Cell[0]=xanh(cũ) áp sai → nay fill đi theo data
+  const chart1Data = useMemo(() => {
+    if (!scanResult) return [] as { name: string; value: number; fill: string; stroke: string }[];
+    return [
+      { name: 'Hợp lệ', value: scanResult.totalPermissions - scanResult.violationCount, fill: '#10b981', stroke: '#d1fae5' },
+      { name: 'Vi phạm', value: scanResult.violationCount, fill: '#f43f5e', stroke: '#ffe4e6' },
+    ].filter((d) => d.value > 0);
+  }, [scanResult]);
+
+  // Chart 2 data — trước tính 2 lần giống nhau trong JSX, nay extracted ra memo dùng chung
+  const riskChartData = useMemo(() => {
+    if (!scanResult) return [] as { name: string; value: number; fill: string; stroke: string }[];
+    return [
+      { name: 'Thấp (LOW)', value: scanResult.permissions.filter((p) => p.riskLevel === 'LOW').length, fill: '#64748b', stroke: '#f1f5f9' },
+      { name: 'Trung bình (MEDIUM)', value: scanResult.permissions.filter((p) => p.riskLevel === 'MEDIUM').length, fill: '#f59e0b', stroke: '#fef3c7' },
+      { name: 'Cao (HIGH)', value: scanResult.permissions.filter((p) => p.riskLevel === 'HIGH').length, fill: '#f43f5e', stroke: '#ffe4e6' },
+    ].filter((d) => d.value > 0);
+  }, [scanResult]);
 
   return (
     <div className="space-y-8 py-2">
@@ -568,29 +590,33 @@ Xác thực bởi Privacy Compass Enterprise`;
               <div className="space-y-2">
                 <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Phân bố kết quả đánh giá</h4>
                 <div className="h-44">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Hợp lệ', value: scanResult.totalPermissions - scanResult.violationCount },
-                          { name: 'Vi phạm', value: scanResult.violationCount },
-                        ].filter((d) => d.value > 0)}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={42}
-                        outerRadius={68}
-                        dataKey="value"
-                        strokeWidth={2}
-                      >
-                        <Cell fill="#10b981" stroke="#d1fae5" />
-                        <Cell fill="#f43f5e" stroke="#ffe4e6" />
-                      </Pie>
-                      <Tooltip
-                        formatter={(value, name) => [`${value ?? 0} quyền`, name ?? '']}
-                        contentStyle={{ fontSize: '11px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  {scanResult.totalPermissions === 0 ? (
+                    <div className="h-full flex items-center justify-center text-xs text-slate-400 italic">
+                      Không có dữ liệu quyền để hiển thị
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={chart1Data}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={42}
+                          outerRadius={68}
+                          dataKey="value"
+                          strokeWidth={2}
+                        >
+                          {chart1Data.map((entry) => (
+                            <Cell key={entry.name} fill={entry.fill} stroke={entry.stroke} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(value, name) => [`${value ?? 0} quyền`, name ?? '']}
+                          contentStyle={{ fontSize: '11px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-600">
                   <span className="flex items-center gap-1.5">
@@ -605,34 +631,37 @@ Xác thực bởi Privacy Compass Enterprise`;
               </div>
 
               {/* Donut chart 2: Phân loại mức độ rủi ro */}
+              {/* Fill được gán vào từng data object để tránh sai màu khi filter loại bỏ một mức rủi ro */}
               <div className="space-y-2">
                 <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Phân loại mức độ rủi ro</h4>
                 <div className="h-44">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={[
-                          { name: 'Thấp (LOW)', value: scanResult.permissions.filter((p) => p.riskLevel === 'LOW').length },
-                          { name: 'Trung bình (MEDIUM)', value: scanResult.permissions.filter((p) => p.riskLevel === 'MEDIUM').length },
-                          { name: 'Cao (HIGH)', value: scanResult.permissions.filter((p) => p.riskLevel === 'HIGH').length },
-                        ].filter((d) => d.value > 0)}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={42}
-                        outerRadius={68}
-                        dataKey="value"
-                        strokeWidth={2}
-                      >
-                        <Cell fill="#64748b" stroke="#f1f5f9" />
-                        <Cell fill="#f59e0b" stroke="#fef3c7" />
-                        <Cell fill="#f43f5e" stroke="#ffe4e6" />
-                      </Pie>
-                      <Tooltip
-                        formatter={(value, name) => [`${value ?? 0} quyền`, name ?? '']}
-                        contentStyle={{ fontSize: '11px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  {scanResult.totalPermissions === 0 ? (
+                    <div className="h-full flex items-center justify-center text-xs text-slate-400 italic">
+                      Không có dữ liệu quyền để hiển thị
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={riskChartData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={42}
+                          outerRadius={68}
+                          dataKey="value"
+                          strokeWidth={2}
+                        >
+                          {riskChartData.map((entry) => (
+                            <Cell key={entry.name} fill={entry.fill} stroke={entry.stroke} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(value, name) => [`${value ?? 0} quyền`, name ?? '']}
+                          contentStyle={{ fontSize: '11px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-500 inline-block" />LOW ({scanResult.permissions.filter((p) => p.riskLevel === 'LOW').length})</span>
