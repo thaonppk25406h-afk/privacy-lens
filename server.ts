@@ -2,8 +2,8 @@ import express, { Request, Response } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
-import * as cheerio from 'cheerio';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
+import { LEGAL_CRITERIA_13, ensure13Criteria } from './src/policy/legalCriteria';
 
 dotenv.config();
 
@@ -26,240 +26,30 @@ const ai = new GoogleGenAI({
   },
 });
 
-// Endpoint: Crawl webpage content from a URL
-app.post('/api/crawl', async (req: Request, res: Response) => {
-  const startTime = Date.now();
-  try {
-    const { url } = req.body;
-    console.log(`[CRAWL] Nhận yêu cầu crawl URL: "${url}"`);
-
-    if (!url || typeof url !== 'string' || !url.startsWith('http')) {
-      console.warn(`[CRAWL] URL không hợp lệ: "${url}"`);
-      return res.status(400).json({
-        error: 'URL không hợp lệ. Đường dẫn phải bắt đầu bằng http:// hoặc https://',
-      });
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      console.warn(`[CRAWL] Quá thời gian timeout 15s cho URL: "${url}"`);
-      controller.abort();
-    }, 15000);
-
-    let response: any;
-    try {
-      response = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-          'Accept':
-            'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-          'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
-        },
-      });
-    } catch (fetchErr: any) {
-      clearTimeout(timeoutId);
-      if (fetchErr.name === 'AbortError') {
-        console.error(`[CRAWL] Hết thời gian chờ (Timeout 15s) khi kết nối URL: "${url}"`);
-        return res.status(504).json({
-          error:
-            'Quá thời gian phản hồi (Timeout 15 giây): Trang web phản hồi quá chậm hoặc không thể kết nối. Vui lòng chuyển sang tab "Dán văn bản điều khoản"!',
-        });
-      }
-      console.error(`[CRAWL] Lỗi fetch network khi tải "${url}":`, fetchErr.message);
-      return res.status(502).json({
-        error: `Không thể kết nối đến máy chủ trang web (${fetchErr.message}). Vui lòng kiểm tra lại URL hoặc dán trực tiếp văn bản!`,
-      });
-    }
-
-    clearTimeout(timeoutId);
-
-    console.log(
-      `[CRAWL] Fetch thành công URL "${url}" - HTTP Status: ${response.status} (${response.statusText})`
-    );
-
-    if (!response.ok) {
-      if (response.status === 403) {
-        return res.status(403).json({
-          error:
-            'Không thể tải trang web: Trang web chặn bot/truy cập tự động (HTTP 403 Forbidden). Vui lòng chuyển sang tab "Dán văn bản điều khoản" để dán nội dung!',
-        });
-      }
-      if (response.status === 401) {
-        return res.status(401).json({
-          error:
-            'Trang web yêu cầu xác thực tài khoản (HTTP 401 Unauthorized). Vui lòng sao chép và dán trực tiếp văn bản vào ô nhập liệu.',
-        });
-      }
-      if (response.status === 404) {
-        return res.status(404).json({
-          error:
-            'Không tìm thấy trang web (HTTP 404 Not Found). Vui lòng kiểm tra lại đường dẫn URL.',
-        });
-      }
-      return res.status(response.status >= 400 && response.status < 600 ? response.status : 502).json({
-        error: `Không thể tải trang web (HTTP ${response.status}: ${response.statusText || 'Lỗi HTTP'}). Vui lòng thử dán trực tiếp văn bản!`,
-      });
-    }
-
-    const html = await response.text();
-    const $ = cheerio.load(html);
-
-    // Remove unnecessary elements
-    $('script, style, noscript, nav, header, footer, iframe, svg, [role="navigation"]').remove();
-
-    // Extract title
-    const title =
-      $('title').text().trim() ||
-      $('h1').first().text().trim() ||
-      'Chính sách bảo mật';
-
-    // Extract main text
-    let mainText = '';
-    const mainContent = $(
-      'main, article, .privacy-policy, .content, #content, .legal, .policy, .privacy'
-    );
-    if (mainContent.length > 0) {
-      mainText = mainContent.text();
-    } else {
-      mainText = $('body').text();
-    }
-
-    // Clean whitespace
-    const cleanedText = mainText
-      .replace(/\s+/g, ' ')
-      .replace(/\n+/g, '\n')
-      .trim();
-
-    console.log(
-      `[CRAWL] Cheerio parse xong. Độ dài text trích xuất: ${cleanedText.length} ký tự (Thời gian: ${Date.now() - startTime
-      }ms)`
-    );
-
-    // If text extracted is too short (< 200 chars), likely a JS SPA or blocking shell
-    if (!cleanedText || cleanedText.length < 200) {
-      console.warn(
-        `[CRAWL] Nội dung quá ngắn (${cleanedText.length} ký tự), trang cần JS render (SPA) hoặc bị chặn.`
-      );
-      return res.status(422).json({
-        error:
-          'Trang này cần JavaScript để hiển thị nội dung, vui lòng dán trực tiếp văn bản chính sách vào ô "Dán văn bản điều khoản" thay vì dùng URL.',
-      });
-    }
-
-    // Trim to reasonable length for analysis (max ~15,000 chars)
-    const truncated = cleanedText.slice(0, 15000);
-
-    return res.json({
-      success: true,
-      url,
-      title,
-      charCount: truncated.length,
-      text: truncated,
-    });
-  } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    console.error('[CRAWL] Ngoại lệ không mong muốn khi crawl:', errorMsg);
-    return res.status(500).json({
-      error: `Lỗi khi xử lý URL: ${errorMsg}. Vui lòng sao chép và dán trực tiếp văn bản vào tab "Dán văn bản điều khoản"!`,
-    });
-  }
-});
-
-const STANDARD_13_CRITERIA = [
-  {
-    id: 1,
-    ten: 'Đồng thuận tự nguyện & Tùy chọn rút lại',
-    moTa: 'Có sự đồng ý tự nguyện và cơ chế rút lại chấp thuận?',
-    canCuPhapLy: 'GDPR Điều 6, 7; NĐ 13 Điều 11',
-  },
-  {
-    id: 2,
-    ten: 'Giới hạn mục đích xử lý dữ liệu',
-    moTa: 'Mục đích thu thập rõ ràng, không sử dụng ngoài phạm vi?',
-    canCuPhapLy: 'GDPR Điều 5(1)(b); NĐ 13 Điều 3',
-  },
-  {
-    id: 3,
-    ten: 'Tối thiểu hóa dữ liệu thu thập',
-    moTa: 'Chỉ thu thập thông tin tương ứng với tính năng cần thiết?',
-    canCuPhapLy: 'GDPR Điều 5(1)(c); Luật BV DLCN 2025',
-  },
-  {
-    id: 4,
-    ten: 'Tính chính xác & Cập nhật dữ liệu',
-    moTa: 'Có biện pháp bảo đảm tính chuẩn xác của thông tin?',
-    canCuPhapLy: 'GDPR Điều 5(1)(d)',
-  },
-  {
-    id: 5,
-    ten: 'Giới hạn thời gian lưu trữ',
-    moTa: 'Quy định rõ thời hạn lưu giữ và cơ chế tiêu hủy?',
-    canCuPhapLy: 'GDPR Điều 5(1)(e)',
-  },
-  {
-    id: 6,
-    ten: 'Minh bạch bên thứ ba nhận dữ liệu',
-    moTa: 'Danh tính và phạm vi chuyển giao cho đối tác thứ ba?',
-    canCuPhapLy: 'GDPR Điều 13, 14; NĐ 13 Điều 13',
-  },
-  {
-    id: 7,
-    ten: 'Quyền truy cập & Xuất dữ liệu',
-    moTa: 'Người dùng có quyền xem lại và trích xuất hồ sơ?',
-    canCuPhapLy: 'GDPR Điều 15, 20; NĐ 13 Điều 9',
-  },
-  {
-    id: 8,
-    ten: 'Quyền chỉnh sửa & Đính chính',
-    moTa: 'Thủ tục yêu cầu sửa chữa dữ liệu sai lệch?',
-    canCuPhapLy: 'GDPR Điều 16; NĐ 13 Điều 9',
-  },
-  {
-    id: 9,
-    ten: 'Quyền yêu cầu xóa & Tiêu hủy',
-    moTa: 'Quy trình xóa dữ liệu và đóng tài khoản?',
-    canCuPhapLy: 'GDPR Điều 17; NĐ 13 Điều 9',
-  },
-  {
-    id: 10,
-    ten: 'Kênh khiếu nại & Đầu mối DPO',
-    moTa: 'Có thông tin liên hệ giải quyết phản ánh riêng tư?',
-    canCuPhapLy: 'GDPR Điều 37, 38; NĐ 13 Điều 9',
-  },
-  {
-    id: 11,
-    ten: 'Biện pháp kỹ thuật & An toàn thông tin',
-    moTa: 'Cam kết mã hóa và phòng ngừa truy cập trái phép?',
-    canCuPhapLy: 'GDPR Điều 32; NĐ 13 Điều 26',
-  },
-  {
-    id: 12,
-    ten: 'Quy trình thông báo sự cố dữ liệu',
-    moTa: 'Có cam kết thông báo cơ quan chức năng và người dùng khi rò rỉ?',
-    canCuPhapLy: 'GDPR Điều 33, 34; NĐ 13 Điều 26',
-  },
-  {
-    id: 13,
-    ten: 'Bảo vệ dữ liệu trẻ em',
-    moTa: 'Chính sách riêng biệt hoặc giới hạn độ tuổi người dùng?',
-    canCuPhapLy: 'GDPR Điều 8; NĐ 13 Điều 20',
-  },
-];
-
-// Endpoint: Summarize and audit Privacy Policy with Gemini AI
+// Endpoint: Summarize and audit Privacy Policy with Gemini AI & Legal Compliance Engine
 app.post('/api/summarize-policy', async (req: Request, res: Response) => {
   try {
     const { text, url, appName } = req.body;
 
+    console.log('[PolicySummarizer] Nhận request /api/summarize-policy:', {
+      appName: appName || 'Chưa đặt tên',
+      textLength: text ? text.length : 0,
+      hasText: typeof text === 'string' && text.length > 0,
+    });
+
     if (!text || typeof text !== 'string' || text.trim().length < 40) {
-      return res.status(400).json({ error: 'Nội dung chính sách bảo mật quá ngắn hoặc không hợp lệ!' });
+      return res.status(400).json({
+        error: 'Nội dung chính sách bảo mật quá ngắn (tối thiểu 40 ký tự)! Vui lòng dán thêm nội dung điều khoản.',
+      });
     }
 
-    const snippet = text.slice(0, 12000);
+    if (text.length > 50000) {
+      return res.status(400).json({
+        error: `Văn bản quá dài (${text.length.toLocaleString('vi-VN')} ký tự). Vui lòng rút gọn xuống dưới 50.000 ký tự để hệ thống phân tích chính xác nhất.`,
+      });
+    }
+
+    const snippet = text.slice(0, 30000);
 
     const systemInstruction = `
 Bạn là Chuyên gia Đánh giá Tuân thủ Bảo mật Dữ liệu (Privacy & Compliance Officer) cao cấp, am hiểu sâu sắc về:
@@ -268,69 +58,32 @@ Bạn là Chuyên gia Đánh giá Tuân thủ Bảo mật Dữ liệu (Privacy &
 
 NGUYÊN TẮC BẮT BUỘC:
 1. CHỈ DỰA TRÊN VĂN BẢN ĐƯỢC CUNG CẤP: Phân tích khách quan, chính xác theo câu chữ có trong đoạn văn bản. Tuyệt đối KHÔNG suy đoán hoặc thêm thắt thông tin ngoài nội dung văn bản.
-2. TUYỆT ĐỐI KHÔNG TÍNH ĐIỂM HOẶC PHẦN TRĂM: Không trả về riskScore, không riskRating, không ratingLabel, không tính phần trăm tuân thủ. Việc thống kê tổng hợp số lượng tiêu chí sẽ do hệ thống code phía sau tự động tính toán.
-3. ĐÁNH GIÁ TỪNG TIÊU CHÍ (tieuChiDanhGia): Bạn phải đánh giá đúng 13 tiêu chí pháp lý chuẩn dưới đây. Trường "muc" BẮT BUỘC chỉ nhận 1 trong 3 giá trị chuỗi sau:
-   - "ro_rang": Văn bản nêu rõ ràng, có điều khoản trực tiếp, minh bạch, đầy đủ.
-   - "chua_day_du": Có nhắc đến nhưng còn chung chung, mơ hồ, chưa đầy đủ hoặc có điều kiện hạn chế.
-   - "khong_de_cap": Văn bản hoàn toàn không được nhắc đến nội dung này.
-4. BẰNG CHỨNG TRÍCH DẪN: Mỗi tiêu chí phải có trường "trichDan" chứa đoạn trích dẫn nguyên văn ngắn (DƯỚI 25 TỪ) lấy trực tiếp từ văn bản làm bằng chứng. Nếu mục đó không được nhắc đến trong văn bản thì bắt buộc ghi đúng là "Không đề cập", tuyệt đối không suy diễn.
-5. KHÔNG TỰ BỊA SỐ ĐIỀU LUẬT NGOÀI DANH SÁCH: Chỉ sử dụng các căn cứ điều luật có thực:
-   - GDPR: Điều 5, Điều 6, Điều 7, Điều 8, Điều 12, Điều 13, Điều 14, Điều 15, Điều 16, Điều 17, Điều 20, Điều 32, Điều 33, Điều 37.
-   - Nghị định 13/2023/NĐ-CP: Điều 3, Điều 9, Điều 11, Điều 13, Điều 17, Điều 20, Điều 21, Điều 26.
-   - Hoặc: Luật Bảo vệ Dữ liệu Cá Nhân 2025.
+2. TUYỆT ĐỐI KHÔNG TÍNH ĐIỂM HOẶC PHẦN TRĂM: Không trả về riskScore, không riskRating, không ratingLabel, không tính phần trăm tuân thủ.
+3. ĐÁNH GIÁ ĐỦ VÀ ĐÚNG 13 TIÊU CHÍ (tieuChiDanhGia): Bạn PHẢI đánh giá đúng và đủ 13 tiêu chí sau, không được bỏ sót, không được thêm tiêu chí khác:
+   [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+   1: Đồng thuận tự nguyện & Quyền rút lại chấp thuận (GDPR Điều 6, 7; NĐ 13/2023 Điều 11)
+   2: Giới hạn mục đích xử lý dữ liệu (GDPR Điều 5(1)(b); NĐ 13/2023 Điều 3)
+   3: Tối thiểu hóa dữ liệu cá nhân thu thập (GDPR Điều 5(1)(c); Luật BV DLCN 2025)
+   4: Tính chính xác và cập nhật thông tin cá nhân (GDPR Điều 5(1)(d))
+   5: Giới hạn thời gian lưu trữ & Tiêu hủy dữ liệu (GDPR Điều 5(1)(e))
+   6: Minh bạch bên thứ ba nhận/chia sẻ dữ liệu (GDPR Điều 13, 14; NĐ 13/2023 Điều 13)
+   7: Quyền truy cập và yêu cầu trích xuất dữ liệu của người dùng (GDPR Điều 15, 20; NĐ 13/2023 Điều 9)
+   8: Quyền chỉnh sửa và đính chính dữ liệu (GDPR Điều 16; NĐ 13/2023 Điều 9)
+   9: Quyền yêu cầu xóa dữ liệu & Rút lại đồng thuận (GDPR Điều 17; NĐ 13/2023 Điều 9)
+   10: Kênh tiếp nhận và giải quyết khiếu nại, đầu mối DPO/liên hệ (GDPR Điều 37, 38; NĐ 13/2023 Điều 9)
+   11: Biện pháp kỹ thuật và an toàn thông tin (GDPR Điều 32; NĐ 13/2023 Điều 26)
+   12: Quy trình thông báo và ứng phó khi có sự cố rò rỉ dữ liệu (GDPR Điều 33, 34; NĐ 13/2023 Điều 26)
+   13: Bảo vệ dữ liệu trẻ em và nhóm đối tượng yếu thế (GDPR Điều 8; NĐ 13/2023 Điều 20)
+
+4. BẰNG CHỨNG TRÍCH DẪN: Mỗi tiêu chí có trường "trichDan" chứa đoạn trích dẫn nguyên văn ngắn (DƯỚI 25 TỪ) từ văn bản gốc, hoặc ghi đúng là "Không đề cập" nếu không có.
+5. Trường "muc" BẮT BUỘC là 1 trong 3 chuỗi: "ro_rang" | "chua_day_du" | "khong_de_cap".
 6. ĐIỂM ĐÁNG LƯU Ý (diemDangLuuY): Liệt kê các điểm cần thận trọng hoặc cần làm rõ thêm, KHÔNG dùng từ ngữ khẳng định tổ chức đã vi phạm pháp luật.
-
-13 TIÊU CHÍ PHÁP LÝ BẮT BUỘC:
-1. Đồng thuận tự nguyện & Quyền rút lại chấp thuận (GDPR Điều 6, 7; NĐ 13 Điều 11)
-2. Giới hạn mục đích xử lý dữ liệu (GDPR Điều 5(1)(b); NĐ 13 Điều 3)
-3. Tối thiểu hóa dữ liệu cá nhân thu thập (GDPR Điều 5(1)(c); Luật BV DLCN 2025)
-4. Tính chính xác và cập nhật thông tin cá nhân (GDPR Điều 5(1)(d))
-5. Giới hạn thời gian lưu trữ & Tiêu hủy dữ liệu (GDPR Điều 5(1)(e))
-6. Minh bạch danh tính bên thứ ba nhận/chia sẻ dữ liệu (GDPR Điều 13, 14; NĐ 13 Điều 13)
-7. Quyền truy cập và yêu cầu trích xuất dữ liệu của người dùng (GDPR Điều 15, 20; NĐ 13 Điều 9)
-8. Quyền chỉnh sửa và đính chính dữ liệu (GDPR Điều 16; NĐ 13 Điều 9)
-9. Quyền yêu cầu xóa dữ liệu & Rút lại đồng thuận (GDPR Điều 17; NĐ 13 Điều 9)
-10. Kênh tiếp nhận và giải quyết khiếu nại, đầu mối DPO/liên hệ (GDPR Điều 37, 38; NĐ 13 Điều 9)
-11. Biện pháp kỹ thuật và an toàn thông tin (GDPR Điều 32; NĐ 13 Điều 26)
-12. Quy trình thông báo và ứng phó khi có sự cố rò rỉ dữ liệu (GDPR Điều 33, 34; NĐ 13 Điều 26)
-13. Bảo vệ dữ liệu trẻ em và nhóm đối tượng yếu thế (GDPR Điều 8; NĐ 13 Điều 20)
-
-Trả về kết quả ở định dạng JSON thuần túy theo cấu trúc:
-{
-  "appName": "Tên ứng dụng",
-  "fivePoints": {
-    "collectedData": "...",
-    "purpose": "...",
-    "thirdPartySharing": "...",
-    "retentionPeriod": "...",
-    "userRights": "..."
-  },
-  "tieuChiDanhGia": [
-    {
-      "id": 1,
-      "ten": "Đồng thuận tự nguyện & Tùy chọn rút lại chấp thuận",
-      "moTa": "Có sự đồng ý tự nguyện và cơ chế rút lại chấp thuận không?",
-      "muc": "ro_rang" | "chua_day_du" | "khong_de_cap",
-      "trichDan": "Trích dẫn nguyên văn dưới 25 từ từ văn bản gốc, hoặc 'Không đề cập'",
-      "canCuPhapLy": "GDPR Điều 6-7, NĐ 13/2023 Điều 11"
-    }
-  ],
-  "diemDangLuuY": [
-    {
-      "title": "Tiêu đề điểm đáng lưu ý",
-      "tieuChiLienQuan": "Tiêu chí liên quan",
-      "legalBasis": "Căn cứ pháp luật",
-      "severity": "HIGH | MEDIUM | LOW",
-      "detail": "Mô tả chi tiết điểm cần lưu ý"
-    }
-  ],
-  "recommendations": ["Khuyến nghị 1", "Khuyến nghị 2"]
-}
 `;
 
     let generatedJsonStr = '';
 
     try {
+      console.log('[PolicySummarizer] Đang gửi yêu cầu phân tích tới Gemini AI...');
       const response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
         contents: [
@@ -338,7 +91,7 @@ Trả về kết quả ở định dạng JSON thuần túy theo cấu trúc:
             role: 'user',
             parts: [
               {
-                text: `Hãy phân tích Chính sách Bảo mật sau đây (App: ${appName || 'Không xác định'}, URL: ${url || 'Không có'}). Chỉ dựa trên văn bản dưới đây, không suy đoán ngoài văn bản, không tính điểm hay phần trăm, mục nào không có thì ghi "khong_de_cap":\n\n${snippet}`,
+                text: `Hãy phân tích Chính sách Bảo mật sau đây (App: ${appName || 'Không xác định'}, URL: ${url || 'Không có'}). Bạn PHẢI đánh giá đúng và đủ 13 tiêu chí sau (criterionId từ 1 đến 13), không được bỏ sót, không được thêm tiêu chí khác: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]:\n\n${snippet}`,
               },
             ],
           },
@@ -346,13 +99,72 @@ Trả về kết quả ở định dạng JSON thuần túy theo cấu trúc:
         config: {
           systemInstruction,
           responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              appName: { type: Type.STRING },
+              fivePoints: {
+                type: Type.OBJECT,
+                properties: {
+                  collectedData: { type: Type.STRING },
+                  purpose: { type: Type.STRING },
+                  thirdPartySharing: { type: Type.STRING },
+                  retentionPeriod: { type: Type.STRING },
+                  userRights: { type: Type.STRING },
+                },
+                required: ['collectedData', 'purpose', 'thirdPartySharing', 'retentionPeriod', 'userRights'],
+              },
+              tieuChiDanhGia: {
+                type: Type.ARRAY,
+                description: 'Mảng bắt buộc ĐÁNH GIÁ ĐỦ ĐÚNG 13 TIÊU CHÍ với criterionId từ 1 đến 13 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]',
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    criterionId: {
+                      type: Type.INTEGER,
+                      description: 'Mã số tiêu chí pháp lý cố định từ 1 đến 13',
+                    },
+                    muc: {
+                      type: Type.STRING,
+                      description: 'Mức độ: "ro_rang" | "chua_day_du" | "khong_de_cap"',
+                    },
+                    trichDan: {
+                      type: Type.STRING,
+                      description: 'Trích dẫn nguyên văn dưới 25 từ hoặc "Không đề cập"',
+                    },
+                  },
+                  required: ['criterionId', 'muc', 'trichDan'],
+                },
+              },
+              diemDangLuuY: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    title: { type: Type.STRING },
+                    tieuChiLienQuan: { type: Type.STRING },
+                    legalBasis: { type: Type.STRING },
+                    severity: { type: Type.STRING },
+                    detail: { type: Type.STRING },
+                  },
+                  required: ['title', 'tieuChiLienQuan', 'legalBasis', 'severity', 'detail'],
+                },
+              },
+              recommendations: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
+              },
+            },
+            required: ['appName', 'fivePoints', 'tieuChiDanhGia', 'diemDangLuuY', 'recommendations'],
+          },
           temperature: 0.2,
         },
       });
 
       generatedJsonStr = response.text || '';
+      console.log('[PolicySummarizer] Response thô từ Gemini TRƯỚC khi parse JSON:\n', generatedJsonStr);
     } catch (apiErr) {
-      console.warn('Gemini API call failed, falling back to heuristic engine:', apiErr);
+      console.warn('[PolicySummarizer] Gemini API call failed, falling back to legal heuristic engine:', apiErr);
     }
 
     let parsedResult: any;
@@ -378,84 +190,8 @@ Trả về kết quả ở định dạng JSON thuần túy theo cấu trúc:
     const hasBreach = lower.includes('sự cố') || lower.includes('rò rỉ') || lower.includes('thông báo vi phạm');
 
     if (parsedResult) {
-      // Normalize tieuChiDanhGia to strictly 13 items
-      const rawCriteria = parsedResult.tieuChiDanhGia || parsedResult.goldenRules || [];
-      const criteriaMap = new Map<number, any>();
-      if (Array.isArray(rawCriteria)) {
-        rawCriteria.forEach((tc: any, idx: number) => {
-          const id = Number(tc.id || tc.ruleNumber) || (idx + 1);
-          criteriaMap.set(id, tc);
-        });
-      }
-
-      parsedResult.tieuChiDanhGia = STANDARD_13_CRITERIA.map((std) => {
-        const found = criteriaMap.get(std.id);
-        if (found) {
-          let m: 'ro_rang' | 'chua_day_du' | 'khong_de_cap' = 'ro_rang';
-          const rawMuc = String(found.muc || found.status || '').toLowerCase();
-          if (rawMuc === 'ro_rang' || rawMuc === 'clear' || found.passed === true) {
-            m = 'ro_rang';
-          } else if (rawMuc === 'khong_de_cap' || rawMuc === 'not_mentioned') {
-            m = 'khong_de_cap';
-          } else if (rawMuc === 'chua_day_du' || rawMuc === 'incomplete' || found.passed === false) {
-            m = 'chua_day_du';
-          } else {
-            m = 'chua_day_du';
-          }
-          return {
-            id: std.id,
-            ten: std.ten,
-            moTa: std.moTa,
-            muc: m,
-            trichDan: found.trichDan || found.detail || (m === 'khong_de_cap' ? 'Không đề cập' : 'Nêu trong văn bản'),
-            canCuPhapLy: std.canCuPhapLy,
-          };
-        }
-
-        // If Gemini omitted this criterion, compute standard default from text:
-        let autoMuc: 'ro_rang' | 'chua_day_du' | 'khong_de_cap' = 'chua_day_du';
-        let autoTrichDan = 'Không đề cập trực tiếp trong văn bản';
-        if (std.id === 1) {
-          autoMuc = hasConsent ? 'ro_rang' : 'chua_day_du';
-          autoTrichDan = hasConsent ? 'Có nhắc đến sự đồng thuận/chấp thuận.' : 'Chưa thể hiện rõ cơ chế tự nguyện.';
-        } else if (std.id === 2 || std.id === 3) {
-          autoMuc = 'ro_rang';
-          autoTrichDan = 'Nêu trong mục đích và phạm vi thu thập.';
-        } else if (std.id === 4) {
-          autoMuc = hasRights ? 'ro_rang' : 'chua_day_du';
-          autoTrichDan = hasRights ? 'Có cơ chế xác nhận và kiểm tra thông tin.' : 'Không đề cập';
-        } else if (std.id === 5) {
-          autoMuc = hasRetention ? 'ro_rang' : 'khong_de_cap';
-          autoTrichDan = hasRetention ? 'Có quy định về thời gian lưu trữ.' : 'Không đề cập';
-        } else if (std.id === 6) {
-          autoMuc = hasThirdParty ? 'chua_day_du' : 'khong_de_cap';
-          autoTrichDan = hasThirdParty ? 'Có nhắc đến chia sẻ bên thứ ba.' : 'Không đề cập';
-        } else if (std.id >= 7 && std.id <= 9) {
-          autoMuc = hasRights ? 'ro_rang' : 'khong_de_cap';
-          autoTrichDan = hasRights ? 'Có đề cập quyền của người dùng.' : 'Không đề cập';
-        } else if (std.id === 10) {
-          autoMuc = (lower.includes('liên hệ') || lower.includes('email')) ? 'ro_rang' : 'chua_day_du';
-          autoTrichDan = 'Có thông tin kênh liên hệ giải đáp.';
-        } else if (std.id === 11) {
-          autoMuc = hasSecurity ? 'ro_rang' : 'khong_de_cap';
-          autoTrichDan = hasSecurity ? 'Có cam kết áp dụng giải pháp an toàn thông tin.' : 'Không đề cập';
-        } else if (std.id === 12) {
-          autoMuc = hasBreach ? 'ro_rang' : 'khong_de_cap';
-          autoTrichDan = hasBreach ? 'Có quy trình thông báo khi có sự cố.' : 'Không đề cập';
-        } else if (std.id === 13) {
-          autoMuc = hasChildren ? 'ro_rang' : 'khong_de_cap';
-          autoTrichDan = hasChildren ? 'Có điều khoản về người dùng dưới tuổi thành niên.' : 'Không đề cập';
-        }
-
-        return {
-          id: std.id,
-          ten: std.ten,
-          moTa: std.moTa,
-          muc: autoMuc,
-          trichDan: autoTrichDan,
-          canCuPhapLy: std.canCuPhapLy,
-        };
-      });
+      // Normalize tieuChiDanhGia to strictly 13 items using ensure13Criteria
+      parsedResult.tieuChiDanhGia = ensure13Criteria(parsedResult.tieuChiDanhGia || parsedResult.goldenRules);
       parsedResult.goldenRules = parsedResult.tieuChiDanhGia;
 
       // Ensure diemDangLuuY uses tieuChiLienQuan
@@ -509,7 +245,7 @@ Trả về kết quả ở định dạng JSON thuần túy theo cấu trúc:
         });
       }
 
-      const standardCriteria = STANDARD_13_CRITERIA.map((std) => {
+      const standardCriteria = LEGAL_CRITERIA_13.map((std) => {
         let autoMuc: 'ro_rang' | 'chua_day_du' | 'khong_de_cap' = 'chua_day_du';
         let autoTrichDan = 'Không đề cập';
         if (std.id === 1) {

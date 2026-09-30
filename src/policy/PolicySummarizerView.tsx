@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Globe,
   ArrowLeft,
   RotateCcw,
   Copy,
@@ -9,12 +8,12 @@ import {
   ExternalLink,
   CheckCircle2,
   HelpCircle,
-  Edit3,
   X,
   RefreshCw
 } from 'lucide-react';
 import { PolicySummaryResult } from '../types';
 import { PRELOADED_POLICIES, PreloadedPolicyItem } from './preloadedPolicies';
+import { ensure13Criteria } from './legalCriteria';
 
 interface PolicySummarizerViewProps {
   onBackToHome: () => void;
@@ -51,26 +50,25 @@ export function calculateCriteriaStats(result: PolicySummaryResult | null): Crit
     };
   }
 
-  const list = result.tieuChiDanhGia || result.goldenRules || [];
+  const list = ensure13Criteria(result.tieuChiDanhGia || result.goldenRules);
   const total = 13;
   let clear = 0;
   let incomplete = 0;
   let notMentioned = 0;
 
   list.forEach((item) => {
-    const m = String(item.muc || (item as any).status || '').toLowerCase();
-    if (m === 'ro_rang' || m === 'clear' || (item as any).passed === true) {
+    if (item.muc === 'ro_rang') {
       clear++;
-    } else if (m === 'khong_de_cap' || m === 'not_mentioned') {
-      notMentioned++;
-    } else {
+    } else if (item.muc === 'chua_day_du') {
       incomplete++;
+    } else {
+      notMentioned++;
     }
   });
 
-  const clearPercent = total > 0 ? (clear / total) * 100 : 0;
-  const incompletePercent = total > 0 ? (incomplete / total) * 100 : 0;
-  const notMentionedPercent = total > 0 ? (notMentioned / total) * 100 : 0;
+  const clearPercent = (clear / total) * 100;
+  const incompletePercent = (incomplete / total) * 100;
+  const notMentionedPercent = (notMentioned / total) * 100;
 
   return {
     total,
@@ -96,10 +94,8 @@ export const PolicySummarizerView: React.FC<PolicySummarizerViewProps> = ({
   initialResult = null,
   initialSampleId = null,
 }) => {
-  const [inputMode, setInputMode] = useState<'url' | 'text'>('url');
-  const [urlInput, setUrlInput] = useState<string>('https://tiktok.com/privacy-policy');
   const [textInput, setTextInput] = useState<string>('');
-  const [appNameInput, setAppNameInput] = useState<string>('TikTok');
+  const [appNameInput, setAppNameInput] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [processStep, setProcessStep] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -131,10 +127,12 @@ export const PolicySummarizerView: React.FC<PolicySummarizerViewProps> = ({
       const raw = localStorage.getItem(`${CACHE_PREFIX}${item.id}:${item.policyDate}`);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed.tieuChiDanhGia && Array.isArray(parsed.tieuChiDanhGia) && parsed.tieuChiDanhGia.length === 13) {
-          return parsed;
-        }
-        localStorage.removeItem(`${CACHE_PREFIX}${item.id}:${item.policyDate}`);
+        const c13 = ensure13Criteria(parsed.tieuChiDanhGia || parsed.goldenRules);
+        return {
+          ...parsed,
+          tieuChiDanhGia: c13,
+          goldenRules: c13,
+        };
       }
     } catch {
       // ignore
@@ -160,19 +158,18 @@ export const PolicySummarizerView: React.FC<PolicySummarizerViewProps> = ({
         const cachedRaw = localStorage.getItem(cacheKey);
         if (cachedRaw) {
           const cachedData: PolicySummaryResult = JSON.parse(cachedRaw);
-          if (cachedData.tieuChiDanhGia && Array.isArray(cachedData.tieuChiDanhGia) && cachedData.tieuChiDanhGia.length === 13) {
-            setResult({
-              ...cachedData,
-              isDemoData: isDemo,
-              sampleId,
-              policyDate,
-            });
-            setIsProcessing(false);
-            setProcessStep('');
-            return;
-          }
-          // Outdated cache format: purge and re-fetch fresh 13 criteria
-          localStorage.removeItem(cacheKey);
+          const c13 = ensure13Criteria(cachedData.tieuChiDanhGia || cachedData.goldenRules);
+          setResult({
+            ...cachedData,
+            tieuChiDanhGia: c13,
+            goldenRules: c13,
+            isDemoData: isDemo,
+            sampleId,
+            policyDate,
+          });
+          setIsProcessing(false);
+          setProcessStep('');
+          return;
         }
       } catch (cacheReadErr) {
         console.warn('Lỗi đọc cache từ localStorage:', cacheReadErr);
@@ -194,6 +191,15 @@ export const PolicySummarizerView: React.FC<PolicySummarizerViewProps> = ({
       setProcessStep('Hệ thống pháp lý đang phân tích và đối chiếu 13 tiêu chí tuân thủ...');
     }
 
+    console.log('[PolicySummarizer] Client bắt đầu gửi yêu cầu soát xét:', {
+      appName: targetAppName,
+      textLength: textToAnalyze.length,
+      sampleId: sampleId || 'Tự nhập',
+    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+
     try {
       let summarizeRes: Response;
       try {
@@ -205,24 +211,38 @@ export const PolicySummarizerView: React.FC<PolicySummarizerViewProps> = ({
             url: targetUrl,
             appName: targetAppName || 'Ứng dụng',
           }),
+          signal: controller.signal,
         });
       } catch (sumErr: any) {
+        clearTimeout(timeoutId);
+        if (sumErr.name === 'AbortError') {
+          throw new Error('Yêu cầu phân tích quá thời gian chờ (Timeout 60 giây). Máy chủ phản hồi chậm hoặc văn bản quá dài.');
+        }
         throw new Error(
-          `Không thể kết nối đến máy chủ soát xét (${sumErr?.message || 'Lỗi mạng'}). Vui lòng thử lại!`
+          `Không thể kết nối đến máy chủ soát xét (${sumErr?.message || 'Lỗi mạng'}). Vui lòng kiểm tra kết nối mạng và thử lại!`
         );
       }
+      clearTimeout(timeoutId);
 
       if (!summarizeRes.ok) {
         const errData = await summarizeRes.json().catch(() => ({}));
-        throw new Error(errData.error || `Lỗi khi soát xét chính sách bảo mật (HTTP ${summarizeRes.status})`);
+        throw new Error(errData.error || `Lỗi khi soát xét chính sách bảo mật (HTTP ${summarizeRes.status}: ${summarizeRes.statusText})`);
       }
 
       const summarizeData = await summarizeRes.json();
+      console.log('[PolicySummarizer] Nhận phản hồi thành công từ server:', {
+        appName: summarizeData.data?.appName,
+        criteriaCount: summarizeData.data?.tieuChiDanhGia?.length,
+      });
+
       const now = new Date();
       const cachedAtStr = `${now.toLocaleDateString('vi-VN')} - ${now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}`;
+      const c13 = ensure13Criteria(summarizeData.data?.tieuChiDanhGia || summarizeData.data?.goldenRules);
 
       const newResult: PolicySummaryResult = {
         ...summarizeData.data,
+        tieuChiDanhGia: c13,
+        goldenRules: c13,
         sourceUrl: targetUrl,
         isDemoData: isDemo,
         policyDate,
@@ -243,6 +263,7 @@ export const PolicySummarizerView: React.FC<PolicySummarizerViewProps> = ({
       setResult(newResult);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      console.error('[PolicySummarizer] Lỗi xử lý:', msg);
       setErrorMessage(msg);
     } finally {
       setIsProcessing(false);
@@ -254,7 +275,6 @@ export const PolicySummarizerView: React.FC<PolicySummarizerViewProps> = ({
   const handleLoadSample = (sampleId: string) => {
     const item = PRELOADED_POLICIES.find((p) => p.id === sampleId);
     if (!item) return;
-    setUrlInput(item.url);
     setTextInput(item.rawText);
     setAppNameInput(item.name);
     executeAnalysis(
@@ -300,90 +320,37 @@ export const PolicySummarizerView: React.FC<PolicySummarizerViewProps> = ({
     }
   }, [initialSampleId]);
 
-  // Perform Manual Policy Review (URL or Text)
+  // Perform Manual Policy Review (Text Only)
   const handleSummarize = async () => {
     setErrorMessage(null);
     setCopyError(null);
     setManualCopyText(null);
 
-    const targetUrl = urlInput.trim();
-    let targetAppName = appNameInput.trim();
+    const cleanText = textInput.trim();
+    const cleanAppName = appNameInput.trim() || 'Ứng dụng cần rà soát';
     const todayStr = getTodayFormatted();
 
-    if (inputMode === 'url') {
-      if (!targetUrl || !targetUrl.startsWith('http')) {
-        setErrorMessage('Vui lòng nhập URL hợp lệ bắt đầu bằng http:// hoặc https://');
-        return;
-      }
-
-      // Check if URL matches a preloaded sample
-      const matchingSample = PRELOADED_POLICIES.find(
-        (p) => p.url.toLowerCase() === targetUrl.toLowerCase()
-      );
-      if (matchingSample) {
-        handleLoadSample(matchingSample.id);
-        return;
-      }
-
-      setIsProcessing(true);
-      setProcessStep('Đang kết nối và tải nội dung từ trang web...');
-
-      try {
-        let crawlRes: Response;
-        try {
-          crawlRes = await fetch('/api/crawl', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: targetUrl }),
-          });
-        } catch (fetchErr: any) {
-          throw new Error(
-            `Không thể kết nối đến máy chủ ứng dụng (${fetchErr?.message || 'Lỗi mạng'}). Vui lòng thử lại hoặc dán trực tiếp văn bản!`
-          );
-        }
-
-        if (!crawlRes.ok) {
-          const errData = await crawlRes.json().catch(() => ({}));
-          throw new Error(
-            errData.error || `Không thể tải trang web (HTTP ${crawlRes.status}: ${crawlRes.statusText})`
-          );
-        }
-
-        const crawlData = await crawlRes.json();
-        if (!targetAppName) {
-          targetAppName = crawlData.title || 'Ứng dụng';
-        }
-
-        await executeAnalysis(
-          crawlData.text,
-          targetUrl,
-          targetAppName,
-          todayStr,
-          undefined,
-          false,
-          true
-        );
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        setErrorMessage(msg);
-        setIsProcessing(false);
-        setProcessStep('');
-      }
-    } else {
-      if (!textInput || textInput.trim().length < 40) {
-        setErrorMessage('Vui lòng nhập hoặc dán nội dung chính sách bảo mật ít nhất 40 ký tự!');
-        return;
-      }
-      await executeAnalysis(
-        textInput,
-        undefined,
-        targetAppName || 'Ứng dụng di động',
-        todayStr,
-        undefined,
-        false,
-        true
-      );
+    if (!cleanText || cleanText.length < 40) {
+      setErrorMessage('Vui lòng nhập hoặc dán nội dung chính sách bảo mật ít nhất 40 ký tự!');
+      return;
     }
+
+    if (cleanText.length > 50000) {
+      setErrorMessage(
+        `Văn bản quá dài (${cleanText.length.toLocaleString('vi-VN')} ký tự). Vui lòng rút gọn xuống dưới 50.000 ký tự để hệ thống phân tích chính xác nhất.`
+      );
+      return;
+    }
+
+    await executeAnalysis(
+      cleanText,
+      undefined,
+      cleanAppName,
+      todayStr,
+      undefined,
+      false,
+      true
+    );
   };
 
   const handleCopySummary = async () => {
@@ -490,7 +457,7 @@ Kết quả do AI tạo ra, chỉ mang tính tham khảo, không thay thế tư 
   };
 
   const currentStats = result ? calculateCriteriaStats(result) : null;
-  const criteriaList = result ? (result.tieuChiDanhGia || result.goldenRules || []) : [];
+  const criteriaList = result ? ensure13Criteria(result.tieuChiDanhGia || result.goldenRules) : [];
   const notesList = result ? (result.diemDangLuuY || result.violations || []) : [];
 
   return (
@@ -553,115 +520,62 @@ Kết quả do AI tạo ra, chỉ mang tính tham khảo, không thay thế tư 
       {/* Main Input Form (When no result yet) */}
       {!result && (
         <div className="space-y-6">
-          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200/90 shadow-xs space-y-6">
-            {/* Input Mode Selector */}
-            <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-100 border border-slate-200 w-fit text-xs font-medium">
-              <button
-                type="button"
-                onClick={() => setInputMode('url')}
-                className={`px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${inputMode === 'url' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-              >
-                <Globe className="w-3.5 h-3.5" />
-                <span>Đường dẫn URL Website</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setInputMode('text')}
-                className={`px-3.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 ${inputMode === 'text' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-600 hover:text-slate-900'
-                  }`}
-              >
-                <Edit3 className="w-3.5 h-3.5" />
-                <span>Dán văn bản điều khoản</span>
-              </button>
+          <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200/90 shadow-xs space-y-5">
+            <div className="border-b border-slate-100 pb-3">
+              <h3 className="text-sm font-bold text-slate-900">
+                Nhập văn bản Chính sách bảo mật để đối soát 13 tiêu chí pháp lý
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Hệ thống thẩm định khách quan theo quy định GDPR, Nghị định 13/2023/NĐ-CP và Luật Bảo vệ dữ liệu cá nhân 2025
+              </p>
             </div>
 
-            {/* URL Input Form */}
-            {inputMode === 'url' ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Đường dẫn trang Chính sách bảo mật (Privacy Policy URL):
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="url"
-                      value={urlInput}
-                      onChange={(e) => setUrlInput(e.target.value)}
-                      placeholder="https://example.com/privacy-policy"
-                      className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-slate-300 text-slate-900 text-xs font-medium focus:outline-hidden focus:ring-1 focus:ring-slate-900"
-                    />
-                    <Globe className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
-                  </div>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Ví dụ: https://tiktok.com/privacy-policy, https://shopee.vn/docs/privacy
-                  </p>
-                </div>
+            <div className="space-y-4">
+              <div className="w-full sm:w-1/2">
+                <label className="text-xs font-bold text-slate-700 block mb-1">
+                  Tên tổ chức / Ứng dụng (Tùy chọn):
+                </label>
+                <input
+                  type="text"
+                  value={appNameInput}
+                  onChange={(e) => setAppNameInput(e.target.value)}
+                  placeholder="Ví dụ: TikTok, Shopee, VNPAY, App nội bộ..."
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 text-xs focus:outline-hidden focus:ring-1 focus:ring-slate-900"
+                />
+              </div>
 
-                <div className="w-full sm:w-1/2">
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Tên tổ chức / Ứng dụng (Tùy chọn):
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-700">
+                    Nội dung văn bản chính sách bảo mật (*):
                   </label>
-                  <input
-                    type="text"
-                    value={appNameInput}
-                    onChange={(e) => setAppNameInput(e.target.value)}
-                    placeholder="TikTok, Shopee, Zalo..."
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 text-xs focus:outline-hidden focus:ring-1 focus:ring-slate-900"
-                  />
+                  <span className="text-[11px] text-slate-500 font-mono">
+                    {textInput.length.toLocaleString('vi-VN')} ký tự
+                  </span>
+                </div>
+                <textarea
+                  rows={8}
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  placeholder="Dán toàn bộ văn bản hoặc các điều khoản chính sách bảo mật cần rà soát tại đây (tối thiểu 40 ký tự)..."
+                  className="w-full p-3.5 rounded-lg border border-slate-300 text-slate-900 text-xs font-sans leading-relaxed focus:outline-hidden focus:ring-1 focus:ring-slate-900"
+                />
+                <div className="mt-2 p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-600 flex items-start gap-2">
+                  <span className="font-bold text-slate-800 shrink-0">Mẹo:</span>
+                  <span>
+                    Vào trang chính sách bảo mật của ứng dụng, chọn toàn bộ văn bản (Ctrl+A), sao chép (Ctrl+C) rồi dán vào đây (Ctrl+V).
+                  </span>
                 </div>
               </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="w-full sm:w-1/2">
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Tên ứng dụng / Đơn vị ban hành:
-                  </label>
-                  <input
-                    type="text"
-                    value={appNameInput}
-                    onChange={(e) => setAppNameInput(e.target.value)}
-                    placeholder="Ví dụ: App Đèn Pin Siêu Sáng"
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-slate-900 text-xs focus:outline-hidden focus:ring-1 focus:ring-slate-900"
-                  />
-                </div>
+            </div>
 
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">
-                    Nội dung văn bản chính sách bảo mật:
-                  </label>
-                  <textarea
-                    rows={6}
-                    value={textInput}
-                    onChange={(e) => setTextInput(e.target.value)}
-                    placeholder="Dán toàn bộ hoặc các điều khoản cần rà soát tại đây..."
-                    className="w-full p-3.5 rounded-lg border border-slate-300 text-slate-900 text-xs font-sans focus:outline-hidden focus:ring-1 focus:ring-slate-900"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Error Message with direct switch button */}
+            {/* Error Message */}
             {errorMessage && (
               <div className="rounded-xl bg-rose-50 border border-rose-200 p-4 text-rose-800 text-xs flex items-start gap-3">
                 <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                <div className="space-y-1.5 flex-1">
-                  <div className="font-bold">Lỗi tải nội dung hoặc thẩm định:</div>
-                  <div className="leading-relaxed">{errorMessage}</div>
-                  {inputMode === 'url' && (
-                    <div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setInputMode('text');
-                          setErrorMessage(null);
-                        }}
-                        className="inline-flex items-center gap-1 font-semibold text-rose-700 hover:text-rose-900 underline mt-1"
-                      >
-                        Chuyển sang tab "Dán văn bản điều khoản" ngay →
-                      </button>
-                    </div>
-                  )}
+                <div className="space-y-1 flex-1">
+                  <div className="font-bold">Lỗi trong quá trình thẩm định:</div>
+                  <div className="leading-relaxed whitespace-pre-wrap">{errorMessage}</div>
                 </div>
               </div>
             )}
