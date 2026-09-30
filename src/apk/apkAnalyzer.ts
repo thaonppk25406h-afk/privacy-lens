@@ -185,9 +185,7 @@ export function evaluatePermissions(
     }
   }
 
-  if (processedPermissions.length === 0) {
-    score = 100;
-  }
+  // score bắt đầu là 100; nếu processedPermissions rỗng, vòng for không chạy → score vẫn là 100 (không cần kiểm tra riêng)
   score = Math.max(0, Math.min(100, Math.round(score)));
 
   let complianceRating: 'GREEN' | 'YELLOW' | 'RED' = 'GREEN';
