@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { X, Printer, Download, ShieldCheck, CheckCircle2, AlertTriangle, FileText } from 'lucide-react';
+import { X, Printer, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { ApkScanResult, PolicySummaryResult } from '../types';
 
 interface AuditCertificateModalProps {
@@ -27,7 +27,10 @@ export const AuditCertificateModal: React.FC<AuditCertificateModalProps> = ({
   const complianceScore = apkResult?.complianceScore ?? 85;
   const ratingLabel = apkResult?.ratingLabel || 'TUÂN THỦ TỐT (COMPLIANT)';
   const auditDate = apkResult?.scanTime || policyResult?.analyzedAt || new Date().toLocaleDateString('vi-VN');
-  const certificateId = `PC-AUDIT-${Math.floor(100000 + Math.random() * 900000)}`;
+  // useRef ensures the certificate ID stays stable across re-renders
+  // (plain const with Math.random() would generate a new ID on every render)
+  const certificateIdRef = useRef(`PC-AUDIT-${Math.floor(100000 + Math.random() * 900000)}`);
+  const certificateId = certificateIdRef.current;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
